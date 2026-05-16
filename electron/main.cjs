@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer, globalShortcut, clipboard, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
+
 const fs = require('fs');
 const path = require('path');
 
@@ -206,6 +208,62 @@ function createWindow() {
     ipcMain.handle('focus-window', () => {
         if (win.isFocusable()) win.focus();
         return true;
+    });
+
+    // Auto-Updater Handlers
+    autoUpdater.autoDownload = false; // Disable auto download for manual control
+
+    autoUpdater.on('checking-for-update', () => {
+        win.webContents.send('update-message', 'Checking for update...');
+    });
+    autoUpdater.on('update-available', (info) => {
+        win.webContents.send('update-available', info);
+    });
+    autoUpdater.on('update-not-available', (info) => {
+        win.webContents.send('update-message', 'ZNinja is up to date.');
+        win.webContents.send('update-not-available');
+    });
+    autoUpdater.on('error', (err) => {
+        const errorMsg = err.message.toLowerCase();
+        
+        // Treat these specific "errors" as "Up to date" or "Offline" for a smoother UX
+        const isNotAnError = 
+            !app.isPackaged || 
+            errorMsg.includes('404') || 
+            errorMsg.includes('not found') ||
+            errorMsg.includes('no published versions') ||
+            errorMsg.includes('dev-app-update.yml') ||
+            errorMsg.includes('net::err_internet_disconnected') ||
+            errorMsg.includes('net::err_name_not_resolved') ||
+            errorMsg.includes('net::err_connection_timed_out');
+
+        if (isNotAnError) {
+            console.log('Suppressed update error (treating as up-to-date):', err.message);
+            // If it's a network error specifically, we might want to say "Check connection" 
+            // but the user asked to show "Up to date" instead of technical errors.
+            win.webContents.send('update-not-available');
+            return;
+        }
+
+        win.webContents.send('update-error', err.message);
+    });
+    autoUpdater.on('download-progress', (progressObj) => {
+        win.webContents.send('update-download-progress', progressObj);
+    });
+    autoUpdater.on('update-downloaded', (info) => {
+        win.webContents.send('update-ready', info);
+    });
+
+    ipcMain.handle('check-for-update', () => {
+        return autoUpdater.checkForUpdates();
+    });
+
+    ipcMain.handle('download-update', () => {
+        return autoUpdater.downloadUpdate();
+    });
+
+    ipcMain.handle('install-update', () => {
+        autoUpdater.quitAndInstall();
     });
 
     // Ghost Typing

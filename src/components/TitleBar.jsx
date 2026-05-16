@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { 
     ClockIcon, PlusIcon, MinusIcon, XIcon, GhostIcon, 
-    NinjaIcon, ResetIcon, ClipboardIcon, BrainIcon, KeyboardIcon 
+    NinjaIcon, ResetIcon, ClipboardIcon, BrainIcon, KeyboardIcon,
+    DownloadIcon
 } from './Icons';
+
 
 const TitleBar = ({
     isStealth,
@@ -21,8 +23,11 @@ const TitleBar = ({
     isClipboardSync,
     setIsClipboardSync,
     toggleGhostTyping,
-    isGhostTyping
+    isGhostTyping,
+    checkForUpdates,
+    updateStatus
 }) => {
+
     const [showModelMenu, setShowModelMenu] = useState(false);
 
     return (
@@ -54,10 +59,18 @@ const TitleBar = ({
 
                     <button 
                         onClick={handleClearKey} 
-                        
                         className="text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200"
                     >
                         <ResetIcon />
+                    </button>
+
+                    <button 
+                        onClick={checkForUpdates}
+                        disabled={updateStatus === 'checking'}
+                        title="Check for Updates"
+                        className={`text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200 ${updateStatus === 'checking' ? 'animate-pulse text-blue-400' : ''}`}
+                    >
+                        <DownloadIcon />
                     </button>
 
                     {/* Model Dropdown */}

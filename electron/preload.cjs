@@ -60,4 +60,37 @@ contextBridge.exposeInMainWorld('electron', {
     getWindowSize: () => ipcRenderer.invoke('get-window-size'),
     showConfirm: (message) => ipcRenderer.invoke('show-confirm', message),
     focusWindow: () => ipcRenderer.invoke('focus-window'),
+    onUpdateAvailable: (callback) => {
+        const subscription = (event, info) => callback(info);
+        ipcRenderer.on('update-available', subscription);
+        return () => ipcRenderer.removeListener('update-available', subscription);
+    },
+    onUpdateReady: (callback) => {
+        const subscription = (event, info) => callback(info);
+        ipcRenderer.on('update-ready', subscription);
+        return () => ipcRenderer.removeListener('update-ready', subscription);
+    },
+    onUpdateProgress: (callback) => {
+        const subscription = (event, progress) => callback(progress);
+        ipcRenderer.on('update-download-progress', subscription);
+        return () => ipcRenderer.removeListener('update-download-progress', subscription);
+    },
+    onUpdateError: (callback) => {
+        const subscription = (event, error) => callback(error);
+        ipcRenderer.on('update-error', subscription);
+        return () => ipcRenderer.removeListener('update-error', subscription);
+    },
+    onUpdateMessage: (callback) => {
+        const subscription = (event, message) => callback(message);
+        ipcRenderer.on('update-message', subscription);
+        return () => ipcRenderer.removeListener('update-message', subscription);
+    },
+    onUpdateNotAvailable: (callback) => {
+        const subscription = () => callback();
+        ipcRenderer.on('update-not-available', subscription);
+        return () => ipcRenderer.removeListener('update-not-available', subscription);
+    },
+    checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+    downloadUpdate: () => ipcRenderer.invoke('download-update'),
+    installUpdate: () => ipcRenderer.invoke('install-update'),
 });
