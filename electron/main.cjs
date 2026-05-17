@@ -27,6 +27,8 @@ function createWindow() {
         frame: false,
         skipTaskbar: true,
         focusable: false,
+        title: 'Service Host: Runtime',
+        icon: path.join(__dirname, '../resources/icon.png'),
         webPreferences: { nodeIntegration: false, contextIsolation: true }
     });
 
@@ -35,11 +37,11 @@ function createWindow() {
         height: initialHeight,
         frame: false, // Frameless for custom UI
         transparent: true, // Transparent background
-        title: 'Service Host Runtime',
+        title: 'Service Host: Runtime',
         alwaysOnTop: true, // Keep it visible to user
         resizable: false, // Prevent resize cursor 100% of the time
         type: 'utility', // Hides from Apps list in Task Manager
-        show: false, // Start completely hidden
+        show: true, // Start completely hidden
         parent: helperWin,
         hasShadow: false,
         icon: path.join(__dirname, '../resources/icon.png'),
@@ -164,7 +166,7 @@ function createWindow() {
 
     ipcMain.handle('get-audio-sources', async () => {
         try {
-            const sources = await desktopCapturer.getSources({ 
+            const sources = await desktopCapturer.getSources({
                 types: ['screen'],
                 thumbnailSize: { width: 150, height: 150 } // Tiny thumbnails for selection UI
             });
@@ -239,11 +241,11 @@ function createWindow() {
     });
     autoUpdater.on('error', (err) => {
         const errorMsg = err.message.toLowerCase();
-        
+
         // Treat these specific "errors" as "Up to date" or "Offline" for a smoother UX
-        const isNotAnError = 
-            !app.isPackaged || 
-            errorMsg.includes('404') || 
+        const isNotAnError =
+            !app.isPackaged ||
+            errorMsg.includes('404') ||
             errorMsg.includes('not found') ||
             errorMsg.includes('no published versions') ||
             errorMsg.includes('dev-app-update.yml') ||
@@ -336,7 +338,7 @@ function createWindow() {
     return win;
 }
 
-app.setName('Service Host Runtime');
+app.setName('Service Host: Runtime');
 
 app.whenReady().then(() => {
     // Shortcuts

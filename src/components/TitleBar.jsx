@@ -67,7 +67,6 @@ const TitleBar = ({
                     <button 
                         onClick={checkForUpdates}
                         disabled={updateStatus === 'checking'}
-                        title="Check for Updates"
                         className={`text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200 ${updateStatus === 'checking' ? 'animate-pulse text-blue-400' : ''}`}
                     >
                         <DownloadIcon />

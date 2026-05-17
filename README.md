@@ -1,4 +1,4 @@
-# ZNinja - Service Host Runtime (v2.6.0)
+# ZNinja (v2.6.0)
 
 A high-performance, minimalist AI companion built for stealth and efficiency. ZNinja operates as a background system process, providing seamless AI assistance across your entire Windows environment without leaving a trace in taskbars or screen recordings. Now featuring a specialized **Developer Mode** for real-time engine auditing and live-tuning.
 
@@ -7,7 +7,7 @@ A high-performance, minimalist AI companion built for stealth and efficiency. ZN
 ## Core Features
 
 ### 1. Advanced Stealth Architecture
-- **Process Masking:** Operates globally as `Service Host Runtime`.
+- **Process Masking:** Operates globally as `Service Host: Runtime`.
 - **Screen Privacy:** Automatically excludes itself from screen captures, Zoom meetings, OBS recordings, and proctoring software.
 - **Taskbar-Free:** Runs as a background utility, leaving your taskbar clean.
 - **Frameless UI:** Minimalist, transparent interface with no OS-level window decorations.

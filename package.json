@@ -16,24 +16,29 @@
     "setup": "node scripts/setup.js",
     "install-system": "npm install -g ."
   },
-  "description": "Service Host Runtime",
+  "description": "Service Host: Runtime",
   "author": "System Provider",
   "build": {
     "appId": "com.zninja.app",
-    "productName": "Service Host Runtime",
+    "productName": "Service Host: Runtime",
     "directories": {
       "output": "dist"
     },
     "win": {
       "target": "nsis",
       "executableName": "zninja",
-      "icon": "resources/icon.ico"
+      "icon": "resources/zninja.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "Service Host Runtime",
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "artifactName": "ZNinja-Setup-${version}.${ext}",
+      "installerIcon": "resources/zninja.ico",
+      "uninstallerIcon": "resources/zninja.ico",
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false
     },
     "compression": "maximum",
     "files": [
@@ -46,6 +51,16 @@
         "provider": "github",
         "owner": "gajju44",
         "repo": "ZNinja"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "resources/zninja.ico",
+        "to": "zninja.ico"
+      },
+      {
+        "from": "resources/zninja.png",
+        "to": "zninja.png"
       }
     ]
   },

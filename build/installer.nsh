@@ -1,6 +1,20 @@
 ; ZNinja NSIS Path Integration Script
 ; Uses electron-builder's built-in StrContains macro — no custom redefinition.
 
+!macro customHeader
+  Caption "ZNinja Setup"
+!macroend
+
+!macro customInit
+  ; Silently kill the process if it is running to prevent "File in Use" errors
+  nsExec::Exec 'taskkill /F /IM zninja.exe /T'
+!macroend
+
+!macro customUnInit
+  ; Silently kill the process before uninstallation
+  nsExec::Exec 'taskkill /F /IM zninja.exe /T'
+!macroend
+
 !macro customInstall
   DetailPrint "Updating System Path for ZNinja..."
 
@@ -25,6 +39,17 @@
       DetailPrint "PATH updated successfully."
 
   EndPathInstall:
+
+  ; Set output path to installation directory
+  SetOutPath "$INSTDIR"
+
+  DetailPrint "Creating custom ZNinja shortcuts..."
+  ; Create shortcuts with specific icon
+  CreateShortCut "$DESKTOP\ZNinja.lnk" "$INSTDIR\zninja.exe" "" "$INSTDIR\resources\zninja.ico" 0
+  
+  ; Create Start Menu folder and shortcut
+  CreateDirectory "$SMPROGRAMS\ZNinja"
+  CreateShortCut "$SMPROGRAMS\ZNinja\ZNinja.lnk" "$INSTDIR\zninja.exe" "" "$INSTDIR\resources\zninja.ico" 0
 !macroend
 
 !macro customUnInstall
@@ -50,6 +75,15 @@
   WriteRegStr HKCU "Environment" "Path" "$0"
   SendMessage 0xffff 0x001A 0 0 /TIMEOUT=5000
   DetailPrint "PATH cleaned successfully."
+
+  DetailPrint "Removing ZNinja shortcuts..."
+  IfFileExists "$DESKTOP\ZNinja.lnk" 0 +2
+    Delete "$DESKTOP\ZNinja.lnk"
+    
+  IfFileExists "$SMPROGRAMS\ZNinja\ZNinja.lnk" 0 +2
+    Delete "$SMPROGRAMS\ZNinja\ZNinja.lnk"
+    
+  RMDir "$SMPROGRAMS\ZNinja"
 !macroend
 
 ; --- UNINSTALLER HELPER (only compiled during uninstaller pass) ---
