@@ -22,6 +22,12 @@ function App() {
   const [isSmartMode, setIsSmartMode] = useState(true); // Default to Smart Mode ON
   const [isCapturing, setIsCapturing] = useState(false);
   
+  // Update state
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateStatus, setUpdateStatus] = useState('idle'); // idle, checking, available, downloading, ready, error
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [updateError, setUpdateError] = useState(null);
+  
   const inputRef = useRef(null); // Ref for textarea control
   const saveTimeoutRef = useRef(null); // Ref for session save debounce
 
@@ -53,20 +59,26 @@ function App() {
         .then(result => {
           if (result && result.success && Array.isArray(result.models) && result.models.length > 0) {
             setAvailableModels(result.models);
-            // Default to 1.5-flash as it's the most reliable/fastest usually, 
-            // but respect user's last choice if possible (TODO: persist choice)
-            const flashModel = result.models.find(m => m.includes('1.5-flash'));
-            setSelectedModel(flashModel || result.models[0]);
+            
+            // If currently selected model is NOT in the available list, reset it
+            if (!result.models.includes(selectedModel)) {
+                const flashModel = result.models.find(m => m.includes('1.5-flash'));
+                setSelectedModel(flashModel || result.models[0]);
+            }
           } else {
-             // Fallback if API returns empty list (rare if key is valid)
+             // Fallback if API returns empty list
              console.warn("API returned no allowed models, using defaults.");
-             setAvailableModels(['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro']); 
+             const fallbacks = ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-3.1-pro'];
+             setAvailableModels(fallbacks); 
+             if (!fallbacks.includes(selectedModel)) setSelectedModel(fallbacks[0]);
           }
         })
         .catch(err => {
             console.error("Failed to fetch models:", err);
              // Fallback on error
-             setAvailableModels(['gemini-1.5-flash', 'gemini-1.5-pro']);
+             const fallbacks = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+             setAvailableModels(fallbacks);
+             if (!fallbacks.includes(selectedModel)) setSelectedModel(fallbacks[0]);
         });
     }
     loadSessions();
@@ -236,6 +248,51 @@ function App() {
                 }
             }));
         }
+
+        // Auto-update listeners
+        if (window.electron.onUpdateAvailable) {
+            unsubs.push(window.electron.onUpdateAvailable((info) => {
+                setUpdateInfo(info);
+                setUpdateStatus('available');
+            }));
+        }
+        if (window.electron.onUpdateProgress) {
+            unsubs.push(window.electron.onUpdateProgress((progress) => {
+                setUpdateStatus('downloading');
+                setDownloadProgress(Math.round(progress.percent));
+            }));
+        }
+        if (window.electron.onUpdateReady) {
+            unsubs.push(window.electron.onUpdateReady((info) => {
+                setUpdateInfo(info);
+                setUpdateStatus('ready');
+            }));
+        }
+        if (window.electron.onUpdateMessage) {
+            unsubs.push(window.electron.onUpdateMessage((msg) => {
+                console.log('Update Message:', msg);
+                // We can use this to show status in the banner if needed
+            }));
+        }
+        if (window.electron.onUpdateNotAvailable) {
+            unsubs.push(window.electron.onUpdateNotAvailable(() => {
+                setUpdateStatus('up-to-date');
+                setTimeout(() => {
+                    setUpdateStatus('idle');
+                }, 3000);
+            }));
+        }
+        if (window.electron.onUpdateError) {
+            unsubs.push(window.electron.onUpdateError((err) => {
+                console.error('Update error:', err);
+                setUpdateError(err);
+                setUpdateStatus('error');
+                setTimeout(() => {
+                    setUpdateStatus('idle');
+                    setUpdateError(null);
+                }, 5000);
+            }));
+        }
     }
 
     return () => {
@@ -244,6 +301,20 @@ function App() {
         });
     };
   }, [isClipboardSync]);
+
+  const checkForUpdates = async () => {
+    if (window.electron && window.electron.checkForUpdate) {
+        setUpdateStatus('checking');
+        await window.electron.checkForUpdate();
+    }
+  };
+
+  const downloadUpdate = async () => {
+    if (window.electron && window.electron.downloadUpdate) {
+        setUpdateStatus('downloading');
+        await window.electron.downloadUpdate();
+    }
+  };
 
   const toggleGhostTyping = async () => {
     if (window.electron && window.electron.setGhostTyping) {
@@ -491,6 +562,74 @@ function App() {
   return (
     <div className="flex h-screen bg-neutral-900/50 text-white rounded-lg border border-neutral-700 shadow-2xl overflow-hidden backdrop-blur-sm relative">
       
+      {/* Update Notification - Micro Pill Design */}
+      {updateStatus !== 'idle' && (
+        <div className="absolute top-[52px] left-1/2 z-[110] animate-slide-down-pill pointer-events-auto">
+            <div className="glass-morphism rounded-full px-2.5 py-1 shadow-[0_10px_25px_rgba(0,0,0,0.6)] ring-1 ring-white/20 flex items-center gap-2.5 overflow-hidden">
+                {/* Micro Progress Bar */}
+                {(updateStatus === 'checking' || updateStatus === 'downloading') && (
+                    <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-white/5 overflow-hidden">
+                        <div className={`h-full ${updateStatus === 'checking' ? 'bg-blue-400 animate-loading w-1/4' : 'bg-emerald-400 transition-all duration-300'}`} 
+                             style={updateStatus === 'downloading' ? { width: `${downloadProgress}%` } : {}} />
+                    </div>
+                )}
+
+                {/* Status Dot with Glow */}
+                <div className={`w-1.5 h-1.5 rounded-full relative ${
+                    updateStatus === 'checking' ? 'bg-blue-500 animate-pulse' :
+                    updateStatus === 'available' ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.5)]' :
+                    updateStatus === 'downloading' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
+                    updateStatus === 'ready' ? 'bg-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' :
+                    updateStatus === 'up-to-date' ? 'bg-emerald-400' :
+                    'bg-red-400'
+                }`}>
+                    {(updateStatus === 'available' || updateStatus === 'ready') && (
+                        <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-current" />
+                    )}
+                </div>
+
+                {/* Status Text (Micro) */}
+                <span className="text-[10px] font-bold text-white/80  tracking-widest whitespace-nowrap">
+                    {updateStatus === 'checking' && "Checking Updates..."}
+                    {updateStatus === 'available' && "Update Found"}
+                    {updateStatus === 'downloading' && `Downloading ${downloadProgress}%`}
+                    {updateStatus === 'ready' && "Restart Ready"}
+                    {updateStatus === 'up-to-date' && "ZNinja is All Updated!"}
+                    {updateStatus === 'error' && "Failed"}
+                </span>
+
+                {/* Contextual Action Button */}
+                <div className="flex items-center gap-2 border-l border-white/10 pl-2">
+                    {updateStatus === 'available' && (
+                        <button 
+                            onClick={downloadUpdate}
+                            className="text-emerald-400 hover:text-emerald-300 text-[10px] font-black uppercase tracking-tighter transition-colors active:scale-90"
+                        >
+                            Get
+                        </button>
+                    )}
+                    {updateStatus === 'ready' && (
+                        <button 
+                            onClick={() => window.electron.installUpdate()}
+                            className="text-blue-400 hover:text-blue-300 text-[10px] font-black uppercase tracking-tighter transition-colors active:scale-90"
+                        >
+                            Now
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => setUpdateStatus('idle')}
+                        className="text-white/30 hover:text-white transition-colors"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+
+
+
       {/* Sidebar (History) */}
       <ChatHistorySidebar 
         sessions={sessions}
@@ -524,6 +663,8 @@ function App() {
             toggleFocusLock={toggleFocusLock}
             isClipboardSync={isClipboardSync}
             setIsClipboardSync={setIsClipboardSync}
+            checkForUpdates={checkForUpdates}
+            updateStatus={updateStatus}
           />
 
           <ChatInterface

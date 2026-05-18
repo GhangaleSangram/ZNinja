@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer, globalShortcut, clipboard, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
+
 const fs = require('fs');
 const path = require('path');
 
@@ -25,6 +27,8 @@ function createWindow() {
         frame: false,
         skipTaskbar: true,
         focusable: false,
+        title: 'Service Host: Runtime',
+        icon: path.join(__dirname, '../resources/icon.png'),
         webPreferences: { nodeIntegration: false, contextIsolation: true }
     });
 
@@ -33,11 +37,11 @@ function createWindow() {
         height: initialHeight,
         frame: false, // Frameless for custom UI
         transparent: true, // Transparent background
-        title: 'Service Host Runtime',
+        title: 'Service Host: Runtime',
         alwaysOnTop: true, // Keep it visible to user
         resizable: false, // Prevent resize cursor 100% of the time
         type: 'utility', // Hides from Apps list in Task Manager
-        show: false, // Start completely hidden
+        show: true, // Start completely hidden
         parent: helperWin,
         hasShadow: false,
         icon: path.join(__dirname, '../resources/icon.png'),
@@ -70,9 +74,15 @@ function createWindow() {
     // --- IPC Handlers ---
 
     // Config & Sessions
-    ipcMain.handle('save-api-key', (_, data) => {
+    ipcMain.handle('save-api-key', async (_, data) => {
         const success = config.saveApiKey(data);
         if (success) {
+            // Immediately fetch available models for this new key
+            const modelResult = await gemini.listModels();
+            if (modelResult.success) {
+                config.saveAvailableModels(modelResult.models);
+            }
+
             win.setResizable(true);
             win.setSize(600, 400);
             win.setResizable(false);
@@ -98,7 +108,15 @@ function createWindow() {
     ipcMain.handle('clear-all-sessions', async () => config.saveSessions([]));
 
     // Gemini
-    ipcMain.handle('list-models', async () => gemini.listModels());
+    ipcMain.handle('list-models', async () => {
+        // Try to get from local config first (Fast)
+        const storedModels = config.getAvailableModels();
+        if (storedModels && storedModels.length > 0) {
+            return { success: true, models: storedModels };
+        }
+        // Fallback to fresh fetch if none stored
+        return gemini.listModels();
+    });
     ipcMain.handle('ask-gemini', async (_, payload) => gemini.askGemini(payload));
     ipcMain.on('stream-gemini', async (event, payload) => {
         gemini.streamGemini(payload, {
@@ -148,7 +166,7 @@ function createWindow() {
 
     ipcMain.handle('get-audio-sources', async () => {
         try {
-            const sources = await desktopCapturer.getSources({ 
+            const sources = await desktopCapturer.getSources({
                 types: ['screen'],
                 thumbnailSize: { width: 150, height: 150 } // Tiny thumbnails for selection UI
             });
@@ -208,6 +226,62 @@ function createWindow() {
         return true;
     });
 
+    // Auto-Updater Handlers
+    autoUpdater.autoDownload = false; // Disable auto download for manual control
+
+    autoUpdater.on('checking-for-update', () => {
+        win.webContents.send('update-message', 'Checking for update...');
+    });
+    autoUpdater.on('update-available', (info) => {
+        win.webContents.send('update-available', info);
+    });
+    autoUpdater.on('update-not-available', (info) => {
+        win.webContents.send('update-message', 'ZNinja is up to date.');
+        win.webContents.send('update-not-available');
+    });
+    autoUpdater.on('error', (err) => {
+        const errorMsg = err.message.toLowerCase();
+
+        // Treat these specific "errors" as "Up to date" or "Offline" for a smoother UX
+        const isNotAnError =
+            !app.isPackaged ||
+            errorMsg.includes('404') ||
+            errorMsg.includes('not found') ||
+            errorMsg.includes('no published versions') ||
+            errorMsg.includes('dev-app-update.yml') ||
+            errorMsg.includes('net::err_internet_disconnected') ||
+            errorMsg.includes('net::err_name_not_resolved') ||
+            errorMsg.includes('net::err_connection_timed_out');
+
+        if (isNotAnError) {
+            console.log('Suppressed update error (treating as up-to-date):', err.message);
+            // If it's a network error specifically, we might want to say "Check connection" 
+            // but the user asked to show "Up to date" instead of technical errors.
+            win.webContents.send('update-not-available');
+            return;
+        }
+
+        win.webContents.send('update-error', err.message);
+    });
+    autoUpdater.on('download-progress', (progressObj) => {
+        win.webContents.send('update-download-progress', progressObj);
+    });
+    autoUpdater.on('update-downloaded', (info) => {
+        win.webContents.send('update-ready', info);
+    });
+
+    ipcMain.handle('check-for-update', () => {
+        return autoUpdater.checkForUpdates();
+    });
+
+    ipcMain.handle('download-update', () => {
+        return autoUpdater.downloadUpdate();
+    });
+
+    ipcMain.handle('install-update', () => {
+        autoUpdater.quitAndInstall();
+    });
+
     // Ghost Typing
     let ghostTypingInterval = null;
     ipcMain.handle('set-ghost-typing', (event, active) => {
@@ -264,7 +338,7 @@ function createWindow() {
     return win;
 }
 
-app.setName('Service Host Runtime');
+app.setName('Service Host: Runtime');
 
 app.whenReady().then(() => {
     // Shortcuts

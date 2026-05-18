@@ -11,7 +11,7 @@ const args = process.argv.slice(2);
 // Handle CLI Flags
 if (args.includes('--help') || args.includes('-h')) {
     console.log(`
- ZNinja - Service Host Runtime CLI
+ ZNinja - Service Host: Runtime CLI
 
 Usage:
   zninja           Launch the application

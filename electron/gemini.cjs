@@ -8,30 +8,42 @@ async function checkTierInternal() {
 }
 
 // List Models
-async function listModels() {
+async function listModels(explicitKey = null) {
     try {
         let models = [];
-        const apiKeys = getApiKeys();
-        const apiKey = apiKeys.length > 0 ? apiKeys[0] : null;
+        const apiKey = explicitKey || getApiKey();
         if (!apiKey) throw new Error("API Key not found");
 
+        // Use v1beta for widest model discovery including experimental ones
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        
+        if (!response.ok) {
+            throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+
         const data = await response.json();
 
         if (data.models) {
             models = data.models
                 .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
                 .map(m => m.name.replace('models/', ''));
-        } else {
-            console.warn("REST API returned no models:", data);
+            
+            // Deduplicate and clean
+            models = [...new Set(models)];
+        } 
+
+        if (models.length === 0) {
+            throw new Error("No models returned from API");
         }
 
         return { success: true, models };
     } catch (error) {
-        console.error('List Models Error:', error);
-        // Fallback
+        console.warn('List Models Fetch failed, using fallback:', error.message);
+        // Robust Fallback (Stable & Experimental)
         return {
-            success: true, models: [
+            success: true, 
+            models: [
+                "gemini-2.0-flash-exp",
                 "gemini-2.0-flash-thinking-exp",
                 "gemini-3-flash",
                 "gemini-2.5-flash",
@@ -39,6 +51,7 @@ async function listModels() {
                 "gemini-1.5-pro-002",
                 "gemini-1.5-flash",
                 "gemini-1.5-flash-8b",
+                "gemini-1.5-flash-002",
                 "gemini-1.0-pro"
             ]
         };

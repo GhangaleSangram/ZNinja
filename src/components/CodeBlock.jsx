@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
 import { CheckIcon, ClipboardIcon } from './Icons';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-const SyntaxHighlighter = React.lazy(() => 
-    import('react-syntax-highlighter').then(module => ({ default: module.Prism }))
+// Lazy-load our lightweight PrismLight wrapper instead of the full Prism bundle.
+// This keeps the initial JS parse budget tiny — the highlighter only downloads
+// when the first code block is rendered.
+const SyntaxHighlighter = React.lazy(() =>
+    import('./SyntaxHighlighterWrapper').then(module => ({
+        default: (props) => (
+            <module.SyntaxHighlighter
+                style={module.vscDarkPlus}
+                {...props}
+            />
+        )
+    }))
 );
 
 const CodeBlock = ({ inline, className, children, ...props }) => {
@@ -33,49 +42,38 @@ const CodeBlock = ({ inline, className, children, ...props }) => {
           {isCopied ? <CheckIcon /> : <ClipboardIcon />}
         </button>
         <React.Suspense fallback={<pre className="bg-black/50 p-4 rounded-lg animate-pulse text-xs text-neutral-500">Loading highlighter...</pre>}>
-            <HighlighterContent match={match} props={props}>{children}</HighlighterContent>
+            <SyntaxHighlighter
+              language={match ? match[1] : 'text'}
+              PreTag="div"
+              wrapLongLines={true}
+              codeTagProps={{
+                style: {
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  maxWidth: '100%',
+                  display: 'inline-block'
+                }
+              }}
+              customStyle={{ 
+                backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+                margin: 0, 
+                borderRadius: '0.5rem',
+                width: '100%',
+                maxWidth: '100%',
+                display: 'grid',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere',
+                overflowX: 'auto',
+                fontSize: '0.85rem'
+              }}
+              {...props}
+            >
+              {String(children).replace(/\n$/, '')}
+            </SyntaxHighlighter>
         </React.Suspense>
       </div>
     );
 };
-
-const HighlighterContent = ({ match, children, props }) => {
-    // We need to import the style dynamically too or just use a static one if we can't easily lazy load the style object
-    // For now, let's keep it simple and just lazy load the component itself.
-    // To also lazy load the style, we'd need to pass it in.
-    
-    return (
-        <SyntaxHighlighter
-          style={vscDarkPlus}
-          language={match ? match[1] : 'text'}
-          PreTag="div"
-          wrapLongLines={true}
-          codeTagProps={{
-            style: {
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              maxWidth: '100%',
-              display: 'inline-block'
-            }
-          }}
-          customStyle={{ 
-            backgroundColor: 'rgba(0, 0, 0, 0.5)', 
-            margin: 0, 
-            borderRadius: '0.5rem',
-            width: '100%',
-            maxWidth: '100%',
-            display: 'grid',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            overflowWrap: 'anywhere',
-            overflowX: 'auto',
-            fontSize: '0.85rem'
-          }}
-          {...props}
-        >
-          {String(children).replace(/\n$/, '')}
-        </SyntaxHighlighter>
-    );
-}
 
 export default CodeBlock;

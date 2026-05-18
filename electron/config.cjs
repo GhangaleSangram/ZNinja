@@ -112,12 +112,45 @@ function clearApiKey() {
             const current = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             if (current.apiKey) {
                 delete current.apiKey;
-                fs.writeFileSync(configPath, JSON.stringify(current, null, 2));
             }
+            if (current.apiKeys) {
+                delete current.apiKeys;
+            }
+            if (current.availableModels) {
+                delete current.availableModels;
+            }
+            fs.writeFileSync(configPath, JSON.stringify(current, null, 2));
         }
         return true;
     } catch (e) {
         console.error("Error clearing config:", e);
+        return false;
+    }
+}
+
+function getAvailableModels() {
+    try {
+        if (fs.existsSync(configPath)) {
+            const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            return data.availableModels || null;
+        }
+    } catch (e) {
+        console.error("Error reading available models:", e);
+    }
+    return null;
+}
+
+function saveAvailableModels(models) {
+    try {
+        let current = {};
+        if (fs.existsSync(configPath)) {
+            current = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        }
+        current.availableModels = models;
+        fs.writeFileSync(configPath, JSON.stringify(current, null, 2));
+        return true;
+    } catch (e) {
+        console.error("Error saving available models:", e);
         return false;
     }
 }
@@ -196,6 +229,8 @@ module.exports = {
     getApiKeys,
     saveApiKey,
     clearApiKey,
+    getAvailableModels,
+    saveAvailableModels,
     getSystemInstruction,
     getSessions,
     saveSessions,
