@@ -461,13 +461,14 @@ function App() {
       }
   }, []);
 
-  const handleSend = useCallback((e) => {
-    e.preventDefault();
-    if (!inputValue.trim()) return;
+  const handleSend = useCallback((e, customText) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    const activeText = (typeof customText === 'string') ? customText : inputValue;
+    if (!activeText.trim() && attachments.length === 0) return;
     
     if (!currentSessionId) setCurrentSessionId(Date.now().toString());
 
-    const userPrompt = inputValue;
+    const userPrompt = activeText;
     const currentAttachments = attachments; // Capture current attachments
     
     setMessages(prev => [...prev, { role: 'user', text: userPrompt, images: currentAttachments }]);

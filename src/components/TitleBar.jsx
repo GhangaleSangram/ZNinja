@@ -4,6 +4,7 @@ import {
     NinjaIcon, ResetIcon, ClipboardIcon, BrainIcon, KeyboardIcon,
     DownloadIcon
 } from './Icons';
+import Tooltip from './ui/tooltip';
 
 
 const TitleBar = ({
@@ -41,36 +42,44 @@ const TitleBar = ({
                 <div className={`w-2 h-2 rounded-full ${isStealth ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-yellow-500 glow-yellow'}`} />
                 
                 <div className="flex items-center gap-1.5 no-drag">
-                    <button 
-                        onClick={() => setShowHistory(!showHistory)} 
-                       
-                        className="text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200"
-                    >
-                        <ClockIcon />
-                    </button>
+                    <Tooltip content="Chat History" side="bottom">
+                        <button 
+                            onClick={() => setShowHistory(!showHistory)} 
+                           
+                            className="text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200"
+                        >
+                            <ClockIcon />
+                        </button>
+                    </Tooltip>
 
-                    <button 
-                        onClick={createNewSession} 
-                       
-                        className="text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200"
-                    >
-                        <PlusIcon />
-                    </button>
+                    <Tooltip content="New Session" side="bottom">
+                        <button 
+                            onClick={createNewSession} 
+                           
+                            className="text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200"
+                        >
+                            <PlusIcon />
+                        </button>
+                    </Tooltip>
 
-                    <button 
-                        onClick={handleClearKey} 
-                        className="text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200"
-                    >
-                        <ResetIcon />
-                    </button>
+                    <Tooltip content="Reset Session" side="bottom">
+                        <button 
+                            onClick={handleClearKey} 
+                            className="text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200"
+                        >
+                            <ResetIcon />
+                        </button>
+                    </Tooltip>
 
-                    <button 
-                        onClick={checkForUpdates}
-                        disabled={updateStatus === 'checking'}
-                        className={`text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200 ${updateStatus === 'checking' ? 'animate-pulse text-blue-400' : ''}`}
-                    >
-                        <DownloadIcon />
-                    </button>
+                    <Tooltip content={updateStatus === 'checking' ? 'Checking for Updates' : 'Check for Updates'} side="bottom">
+                        <button 
+                            onClick={checkForUpdates}
+                            disabled={updateStatus === 'checking'}
+                            className={`text-neutral-400 hover:text-white hover:bg-white/10 rounded-md p-1.5 transition-all duration-200 ${updateStatus === 'checking' ? 'animate-pulse text-blue-400' : ''}`}
+                        >
+                            <DownloadIcon />
+                        </button>
+                    </Tooltip>
 
                     {/* Model Dropdown */}
                     <div className="relative ml-1">
@@ -113,47 +122,58 @@ const TitleBar = ({
                 {/* Unified Toggle Group */}
                 <div className="flex items-center gap-1 bg-white/5 rounded-full px-1 py-[2px] mx-2">
                     {/* Smart Mode Button */}
-                    <button 
-                        onClick={() => setIsSmartMode(!isSmartMode)} 
-                        
-                        className={`p-1.5 rounded-full transition-all duration-300 ${isSmartMode ? 'text-fuchsia-500  ' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
-                    >
-                        <BrainIcon />
-                    </button>
+                    {/* Smart Mode Button */}
+                    <Tooltip content={isSmartMode ? 'Smart Mode: ON' : 'Smart Mode: OFF'} side="bottom">
+                        <button 
+                            onClick={() => setIsSmartMode(!isSmartMode)} 
+                            
+                            className={`p-1.5 rounded-full transition-all duration-300 ${isSmartMode ? 'text-fuchsia-500  ' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
+                        >
+                            <BrainIcon />
+                        </button>
+                    </Tooltip>
 
-                    <button 
-                        onClick={toggleFocusLock} 
-                       
-                        className={`p-1.5 rounded-full transition-all duration-200 ${isFocusLocked ? 'text-indigo-400' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
-                    >
-                        <GhostIcon  />
-                    </button>
+                    <Tooltip content={isFocusLocked ? 'Ghost Mode: ON' : 'Ghost Mode: OFF'} side="bottom">
+                        <button 
+                            onClick={toggleFocusLock} 
+                           
+                            className={`p-1.5 rounded-full transition-all duration-200 ${isFocusLocked ? 'text-indigo-400' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
+                        >
+                            <GhostIcon  />
+                        </button>
+                    </Tooltip>
 
                     {isFocusLocked && (
-                        <button 
-                            onClick={toggleGhostTyping} 
-                           
-                            className={`p-1.5 rounded-full transition-all duration-200 ${isGhostTyping ? 'text-amber-400' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
-                        >
-                            <KeyboardIcon />
-                        </button>
+                        <Tooltip content={isGhostTyping ? 'Ghost Typing: ON' : 'Ghost Typing: OFF'} side="bottom">
+                            <button 
+                                onClick={toggleGhostTyping} 
+                               
+                                className={`p-1.5 rounded-full transition-all duration-200 ${isGhostTyping ? 'text-amber-400' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
+                            >
+                                <KeyboardIcon />
+                            </button>
+                        </Tooltip>
                     )}
                     
-                    <button 
-                        onClick={() => setIsClipboardSync(!isClipboardSync)} 
-                       
-                        className={`p-1.5 rounded-full transition-all duration-200 ${isClipboardSync ? 'text-blue-400' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
-                    >
-                        <ClipboardIcon  />
-                    </button>
+                    <Tooltip content={isClipboardSync ? 'Clipboard Sync: ON' : 'Clipboard Sync: OFF'} side="bottom">
+                        <button 
+                            onClick={() => setIsClipboardSync(!isClipboardSync)} 
+                           
+                            className={`p-1.5 rounded-full transition-all duration-200 ${isClipboardSync ? 'text-blue-400' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
+                        >
+                            <ClipboardIcon  />
+                        </button>
+                    </Tooltip>
 
-                    <button 
-                        onClick={toggleStealth} 
-                        
-                        className={`p-1.5 rounded-full transition-all duration-200 ${isStealth ? 'text-emerald-400' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
-                    >
-                        <NinjaIcon  />
-                    </button>
+                    <Tooltip content={isStealth ? 'Stealth Mode: ON' : 'Stealth Mode: OFF'} side="bottom">
+                        <button 
+                            onClick={toggleStealth} 
+                            
+                            className={`p-1.5 rounded-full transition-all duration-200 ${isStealth ? 'text-emerald-400' : 'text-neutral-400 hover:text-neutral-300 hover:bg-white/5'}`}
+                        >
+                            <NinjaIcon  />
+                        </button>
+                    </Tooltip>
                 </div>
 
                 {/* Window Controls */}

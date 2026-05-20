@@ -72,9 +72,9 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
         if (isComplex) {
             console.log("ZNinja Router: Complex/Coding detected.");
             smartFallbacks = [
-                "gemini-3-flash-preview",
-                "gemini-3-pro-preview",
-                "gemini-2.5-pro"
+                "gemini-3.1-pro-preview",
+                "gemini-2.5-pro",
+                "gemini-3-pro-preview"
             ];
         } else {
             console.log("ZNinja Router: Simple Chat detected.");
@@ -100,34 +100,31 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
 
     // --- SYSTEM INSTRUCTION LOGIC ---
     const MODE_INSTRUCTIONS = {
-        'general': `You are ZNinja, a helpful and highly efficient assistant.
-**Output Format (STRICT):**
-- Direct answer first.
-- Minimal explanation only if essential.
-- No conversational fillers.`,
+        'general': `You are ZNinja, an ultra-direct and highly efficient assistant.
+- Give the final correct answer or solution immediately as the very first sentence.
+- Eliminate all conversational filler, introductory pleasantries, and redundant explanations.
+- Keep reasoning high-density, concise, and purely factual.`,
 
-        'code': `You are a Senior Software Engineer.
-**Goal:** Production-ready, optimal code.
-**Preferences:** Default to Java or Python unless context dictates otherwise.
-**Output Structure (STRICT):**
-1. **Logic**: 1 sentence.
-2. **Code**: Full, clean, and ready-to-paste.
-3. **Complexity**: Time/Space O(n).`,
+        'code': `You are ZNinja, an Elite Senior Software Engineer.
+- Deliver 100% complete, fully functional, production-ready code.
+- Absolutely NO placeholders, no truncated snippets, and no comments like "// TODO" or "// ... rest of code".
+- Default to writing NO comments in the code. Code must be highly readable and self-documenting. A maximum of one single-line comment is permitted only for non-obvious algorithmic tricks.
+- Structure your output:
+  1. A one-sentence explanation of the approach/design.
+  2. The complete, clean code block.
+  3. Time & Space complexity in Big O notation.
+- Eliminate any introductory or concluding conversational fluff.`,
 
-        'competitive': `You are ZNinja, an elite LeetCode/CP Solver.
-**Goal:** Optimal algorithmic efficiency (O(N) focus).
-**Preferences:** Use Java or Python (untill their is context of other langugae) class-based structure for LeetCode-style problems.
-**Output Structure (STRICT):**
-1. **Logic**: 1 concise sentence.
-2. **Code**: Ready-to-paste solution ONLY.
-3. **Complexity**: Time/Space Big O.
-- NO theory, NO intro, NO outro, less comments.`,
+        'competitive': `You are ZNinja, an Elite Algorithmic Solver.
+- Deliver the optimal, complete algorithmic solution immediately.
+- Use clean, idiomatic code with optimal time and space complexity.
+- Absolutely NO comments in the code, NO intro, NO outro, NO explanations, and NO conversational noise.
+- Output ONLY the ready-to-paste code block containing the complete solution that gives correct output on the provided testcases (if provided).`,
 
-        'quiz': `Expert Tutor.
-**Goal:** Speed and Correctness.
-**Output Format (STRICT):**
-- Correct Option (e.g. 'Option A') followed by 1-sentence justification.
-- NO extra text.`
+        'quiz': `You are ZNinja, an Expert Academic Tutor.
+- Output the correct option immediately (e.g., "Option A: [Option Content]").
+- Provide exactly one concise sentence justifying the correctness.
+- Absolutely NO extra text, introductory greeting, or closing conversation.`
     };
 
     const defaultSystemInstruction = getSystemInstruction();
@@ -155,90 +152,117 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
                 console.log(`Attempting Gemini (${modelId}) with Key #${kIndex + 1}...`);
                 const genAI = new GoogleGenerativeAI(currentKey);
 
-                const model = genAI.getGenerativeModel({
+                const isThinkingModel = modelId.includes('thinking');
+                const isLegacyModel = modelId.includes('1.5') || modelId.includes('1.0');
+                
+                const modelOptions = {
                     model: modelId,
                     systemInstruction: systemInstruction
-                });
+                };
 
+                // Enable Search Grounding by default for 2.x/3.x non-thinking models
+                if (!isThinkingModel && !isLegacyModel) {
+                    modelOptions.tools = [{ googleSearch: {} }];
+                }
+
+                let model = genAI.getGenerativeModel(modelOptions);
                 let result;
                 const allImages = images || (image ? [image] : []);
 
-                if (audioData) {
-                    // Audio Mode
-                    const base64Data = audioData.split(',')[1];
-                    const parts = audioData.split(';');
-                    const mimeType = parts[0].split(':')[1] || 'audio/webm';
+                const executeCall = async (activeModel) => {
+                    if (audioData) {
+                        const base64Data = audioData.split(',')[1];
+                        const parts = audioData.split(';');
+                        const mimeType = parts[0].split(':')[1] || 'audio/webm';
 
-                    const textPrompt = prompt || `Prepare professional Minutes of Meeting from this audio.`;
+                        const textPrompt = prompt || `Prepare professional Minutes of Meeting from this audio.`;
 
-                    const contentParts = [
-                        { text: textPrompt },
-                        { inlineData: { data: base64Data, mimeType: mimeType } }
-                    ];
+                        const contentParts = [
+                            { text: textPrompt },
+                            { inlineData: { data: base64Data, mimeType: mimeType } }
+                        ];
 
-                    const genConfig = { maxOutputTokens: 65536 };
-                    if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
-                        genConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                        const genConfig = { maxOutputTokens: 65536 };
+                        if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
+                            genConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                        }
+
+                        return activeModel.generateContent({
+                            contents: [{ role: 'user', parts: contentParts }],
+                            generationConfig: genConfig,
+                            safetySettings: [
+                                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                            ]
+                        });
+                    } else if (allImages.length > 0) {
+                        let visionInstructions = "Analyze image directly.";
+                        if (workingMode === 'competitive') visionInstructions = "Solve the CP problem in the image.";
+                        else if (workingMode === 'quiz') visionInstructions = "Solve this quiz question.";
+
+                        const visionPrompt = `[VISION ACTIVE] ${visionInstructions}\n${prompt || ""}`;
+                        const visionParts = [{ text: visionPrompt }];
+                        allImages.forEach(img => {
+                            const mimeTypeMatch = img.match(/^data:(image\/[a-zA-Z]*);base64,/);
+                            const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/png";
+                            visionParts.push({ inlineData: { data: img.split(',')[1], mimeType: mimeType } });
+                        });
+
+                        const visionConfig = { maxOutputTokens: 65536 };
+                        if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
+                            visionConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                        }
+
+                        return activeModel.generateContent({
+                            contents: [{ role: 'user', parts: visionParts }],
+                            generationConfig: visionConfig,
+                            safetySettings: [
+                                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                            ]
+                        });
+                    } else {
+                        const genConfig = { maxOutputTokens: 65536 };
+                        if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
+                            genConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                        }
+
+                        const chat = activeModel.startChat({
+                            history: history,
+                            generationConfig: genConfig,
+                            safetySettings: [
+                                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                            ]
+                        });
+
+                        return chat.sendMessage(prompt || ".");
                     }
+                };
 
-                    result = await model.generateContent({
-                        contents: [{ role: 'user', parts: contentParts }],
-                        generationConfig: genConfig,
-                        safetySettings: [
-                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        ]
-                    });
-                } else if (allImages.length > 0) {
-                    // Vision Mode
-                    let visionInstructions = "Analyze image directly.";
-                    if (workingMode === 'competitive') visionInstructions = "Solve the CP problem in the image.";
-                    else if (workingMode === 'quiz') visionInstructions = "Solve this quiz question.";
-
-                    const visionPrompt = `[VISION ACTIVE] ${visionInstructions}\n${prompt || ""}`;
-                    const visionParts = [{ text: visionPrompt }];
-                    allImages.forEach(img => {
-                        const mimeTypeMatch = img.match(/^data:(image\/[a-zA-Z]*);base64,/);
-                        const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/png";
-                        visionParts.push({ inlineData: { data: img.split(',')[1], mimeType: mimeType } });
-                    });
-
-                    const visionConfig = { maxOutputTokens: 65536 };
-                    if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
-                        visionConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                try {
+                    result = await executeCall(model);
+                } catch (callError) {
+                    const errorMsg = (callError.message || '').toLowerCase();
+                    const isToolError = errorMsg.includes('tool') || 
+                                       errorMsg.includes('grounding') || 
+                                       errorMsg.includes('invalid_argument') || 
+                                       errorMsg.includes('unsupported');
+                    
+                    if (isToolError && modelOptions.tools) {
+                        console.warn(`Search grounding unsupported on ${modelId} (${callError.message}). Retrying without tools...`);
+                        delete modelOptions.tools;
+                        const fallbackModel = genAI.getGenerativeModel(modelOptions);
+                        result = await executeCall(fallbackModel);
+                    } else {
+                        throw callError;
                     }
-
-                    result = await model.generateContent({
-                        contents: [{ role: 'user', parts: visionParts }],
-                        generationConfig: visionConfig,
-                        safetySettings: [
-                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        ]
-                    });
-                } else {
-                    // Chat Mode
-                    const genConfig = { maxOutputTokens: 65536 };
-                    if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
-                        genConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
-                    }
-
-                    const chat = model.startChat({
-                        history: history,
-                        generationConfig: genConfig,
-                        safetySettings: [
-                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        ]
-                    });
-
-                    result = await chat.sendMessage(prompt || ".");
                 }
 
                 const response = await result.response;
@@ -246,7 +270,76 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
                     throw new Error("Response blocked by safety filters.");
                 }
                 
-                const text = response.text();
+                let text = response.text();
+
+                // Critique-and-refining pass for code/competitive modes if laziness is detected
+                if (text && (workingMode === 'code' || workingMode === 'competitive')) {
+                    const lazyPatterns = [
+                        /\/\/\s*\.\.\./i,            // // ...
+                        /\/\*\s*\.\.\.\s*\*\//i,    // /* ... */
+                        /#\s*\.\.\./i,               // # ...
+                        /\/\/\s*TODO/i,              // // TODO
+                        /\/\*\s*TODO/i,              // /* TODO
+                        /#\s*TODO/i,                 // # TODO
+                        /\/\/\s*rest of/i,           // // rest of
+                        /\/\/\s*implement/i,          // // implement
+                        /\/\/\s*write your/i,        // // write your
+                        /#\s*rest of/i,              // # rest of
+                        /#\s*implement/i,            // # implement
+                        /#\s*write your/i            // # write your
+                    ];
+
+                    const hasLaziness = lazyPatterns.some(pattern => pattern.test(text));
+                    if (hasLaziness) {
+                        console.log("ZNinja Refiner: Lazy placeholder detected in first draft. Initiating refinement pass...");
+                        try {
+                            const refinerPrompt = `The user asked for:
+"${prompt}"
+
+Here is an incomplete draft that contains placeholders, lazy comments (like "// ...", "// TODO"), or missing implementations:
+\`\`\`
+${text}
+\`\`\`
+
+You must rewrite this and output a 100% complete, fully implemented, ready-to-run solution.
+Strictly adhere to the following rules:
+1. Do NOT use any placeholders, inline TODOs, or truncated snippets under any circumstances. Implement EVERY single method, variable, and class completely.
+2. Maintain clean, highly readable code with absolutely minimal or zero comments. Do not write obvious comments.
+3. Match the direct, high-density system instruction style (no conversational fillers, no explanations before/after code unless requested).`;
+
+                            const refinerModel = genAI.getGenerativeModel(modelOptions);
+                            let refinerResult;
+                            
+                            const refConfig = { maxOutputTokens: 65536 };
+                            if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
+                                refConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                            }
+
+                            refinerResult = await refinerModel.generateContent({
+                                contents: [{ role: 'user', parts: [{ text: refinerPrompt }] }],
+                                generationConfig: refConfig,
+                                safetySettings: [
+                                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                ]
+                            });
+
+                            const refinerResponse = await refinerResult.response;
+                            if (refinerResponse.candidates && refinerResponse.candidates.length > 0) {
+                                const refinedText = refinerResponse.text();
+                                if (refinedText && refinedText.trim().length > 0) {
+                                    console.log("ZNinja Refiner: Refinement successful. Returning complete code.");
+                                    text = refinedText;
+                                }
+                            }
+                        } catch (refError) {
+                            console.error("ZNinja Refiner failed, falling back to original draft:", refError.message);
+                        }
+                    }
+                }
+
                 return { success: true, text, usedModel: modelId };
 
             } catch (error) {
@@ -289,9 +382,9 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
         if (isComplex) {
             console.log("ZNinja Router: Complex/Coding detected.");
             smartFallbacks = [
-                "gemini-3-flash-preview",
-                "gemini-3-pro-preview",
-                "gemini-2.5-pro"
+                "gemini-3.1-pro-preview",
+                "gemini-2.5-pro",
+                "gemini-3-pro-preview"
             ];
         } else {
             console.log("ZNinja Router: Simple Chat detected.");
@@ -317,34 +410,31 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
 
     // --- SYSTEM INSTRUCTION LOGIC ---
     const MODE_INSTRUCTIONS = {
-        'general': `You are ZNinja, a helpful and highly efficient assistant.
-**Output Format (STRICT):**
-- Direct answer first.
-- Minimal explanation only if essential.
-- No conversational fillers.`,
+        'general': `You are ZNinja, an ultra-direct and highly efficient assistant.
+- Give the final correct answer or solution immediately as the very first sentence.
+- Eliminate all conversational filler, introductory pleasantries, and redundant explanations.
+- Keep reasoning high-density, concise, and purely factual.`,
 
-        'code': `You are a Senior Software Engineer.
-**Goal:** Production-ready, optimal code.
-**Preferences:** Default to Java or Python unless context dictates otherwise.
-**Output Structure (STRICT):**
-1. **Logic**: 1 sentence.
-2. **Code**: Full, clean, and ready-to-paste.
-3. **Complexity**: Time/Space O(n).`,
+        'code': `You are ZNinja, an Elite Senior Software Engineer.
+- Deliver 100% complete, fully functional, production-ready code.
+- Absolutely NO placeholders, no truncated snippets, and no comments like "// TODO" or "// ... rest of code".
+- Default to writing NO comments in the code. Code must be highly readable and self-documenting. A maximum of one single-line comment is permitted only for non-obvious algorithmic tricks.
+- Structure your output:
+  1. A one-sentence explanation of the approach/design.
+  2. The complete, clean code block.
+  3. Time & Space complexity in Big O notation.
+- Eliminate any introductory or concluding conversational fluff.`,
 
-        'competitive': `You are ZNinja, an elite LeetCode/CP Solver.
-**Goal:** Optimal algorithmic efficiency (O(N) focus).
-**Preferences:** Use Java or Python (untill their is context of other langugae) class-based structure for LeetCode-style problems.
-**Output Structure (STRICT):**
-1. **Logic**: 1 concise sentence.
-2. **Code**: Ready-to-paste solution ONLY.
-3. **Complexity**: Time/Space Big O.
-- NO theory, NO intro, NO outro, less comments.`,
+        'competitive': `You are ZNinja, an Elite Algorithmic Solver.
+- Deliver the optimal, complete algorithmic solution immediately.
+- Use clean, idiomatic code with optimal time and space complexity.
+- Absolutely NO comments in the code, NO intro, NO outro, NO explanations, and NO conversational noise.
+- Output ONLY the ready-to-paste code block containing the complete solution.`,
 
-        'quiz': `Expert Tutor.
-**Goal:** Speed and Correctness.
-**Output Format (STRICT):**
-- Correct Option (e.g. 'Option A') followed by 1-sentence justification.
-- NO extra text.`
+        'quiz': `You are ZNinja, an Expert Academic Tutor.
+- Output the correct option immediately (e.g., "Option A: [Option Content]").
+- Provide exactly one concise sentence justifying the correctness.
+- Absolutely NO extra text, introductory greeting, or closing conversation.`
     };
 
     const defaultSystemInstruction = getSystemInstruction();
@@ -371,62 +461,90 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
                 console.log(`Attempting Gemini Streaming (${modelId}) with Key #${kIndex + 1}...`);
                 const genAI = new GoogleGenerativeAI(currentKey);
 
-                const model = genAI.getGenerativeModel({
+                const isThinkingModel = modelId.includes('thinking');
+                const isLegacyModel = modelId.includes('1.5') || modelId.includes('1.0');
+
+                const modelOptions = {
                     model: modelId,
                     systemInstruction: systemInstruction
-                });
+                };
 
+                // Enable Search Grounding by default for 2.x/3.x non-thinking models
+                if (!isThinkingModel && !isLegacyModel) {
+                    modelOptions.tools = [{ googleSearch: {} }];
+                }
+
+                let model = genAI.getGenerativeModel(modelOptions);
                 const allImages = images || (image ? [image] : []);
                 let resultStream;
 
-                if (allImages.length > 0) {
-                    // Vision Mode
-                    let visionInstructions = "Analyze image directly.";
-                    if (workingMode === 'competitive') visionInstructions = "Solve the CP problem in the image.";
-                    else if (workingMode === 'quiz') visionInstructions = "Solve this quiz question.";
+                const executeStreamCall = async (activeModel) => {
+                    if (allImages.length > 0) {
+                        let visionInstructions = "Analyze image directly.";
+                        if (workingMode === 'competitive') visionInstructions = "Solve the CP problem in the image.";
+                        else if (workingMode === 'quiz') visionInstructions = "Solve this quiz question.";
 
-                    const visionPrompt = `[VISION ACTIVE] ${visionInstructions}\n${prompt || ""}`;
-                    const visionParts = [{ text: visionPrompt }];
-                    allImages.forEach(img => {
-                        const mimeTypeMatch = img.match(/^data:(image\/[a-zA-Z]*);base64,/);
-                        const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/png";
-                        visionParts.push({ inlineData: { data: img.split(',')[1], mimeType: mimeType } });
-                    });
+                        const visionPrompt = `[VISION ACTIVE] ${visionInstructions}\n${prompt || ""}`;
+                        const visionParts = [{ text: visionPrompt }];
+                        allImages.forEach(img => {
+                            const mimeTypeMatch = img.match(/^data:(image\/[a-zA-Z]*);base64,/);
+                            const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/png";
+                            visionParts.push({ inlineData: { data: img.split(',')[1], mimeType: mimeType } });
+                        });
 
-                    const visionConfig = { maxOutputTokens: 65536 };
-                    if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
-                        visionConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                        const visionConfig = { maxOutputTokens: 65536 };
+                        if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
+                            visionConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                        }
+
+                        return activeModel.generateContentStream({
+                            contents: [{ role: 'user', parts: visionParts }],
+                            generationConfig: visionConfig,
+                            safetySettings: [
+                                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                            ]
+                        });
+                    } else {
+                        const genConfig = { maxOutputTokens: 65536 };
+                        if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
+                            genConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                        }
+
+                        const chat = activeModel.startChat({
+                            history: history,
+                            generationConfig: genConfig,
+                            safetySettings: [
+                                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                            ]
+                        });
+
+                        return chat.sendMessageStream(prompt || ".");
                     }
+                };
 
-                    resultStream = await model.generateContentStream({
-                        contents: [{ role: 'user', parts: visionParts }],
-                        generationConfig: visionConfig,
-                        safetySettings: [
-                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        ]
-                    });
-                } else {
-                    // Chat Mode
-                    const genConfig = { maxOutputTokens: 65536 };
-                    if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
-                        genConfig.thinkingConfig = { includeThoughts: true, thinkingLevel: "HIGH" };
+                try {
+                    resultStream = await executeStreamCall(model);
+                } catch (callError) {
+                    const errorMsg = (callError.message || '').toLowerCase();
+                    const isToolError = errorMsg.includes('tool') || 
+                                       errorMsg.includes('grounding') || 
+                                       errorMsg.includes('invalid_argument') || 
+                                       errorMsg.includes('unsupported');
+                    
+                    if (isToolError && modelOptions.tools) {
+                        console.warn(`Search grounding unsupported for streaming on ${modelId} (${callError.message}). Retrying standard stream call...`);
+                        delete modelOptions.tools;
+                        const fallbackModel = genAI.getGenerativeModel(modelOptions);
+                        resultStream = await executeStreamCall(fallbackModel);
+                    } else {
+                        throw callError;
                     }
-
-                    const chat = model.startChat({
-                        history: history,
-                        generationConfig: genConfig,
-                        safetySettings: [
-                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        ]
-                    });
-
-                    resultStream = await chat.sendMessageStream(prompt || ".");
                 }
 
                 // Consume stream

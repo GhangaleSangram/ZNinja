@@ -1,4 +1,4 @@
-import React, { useRef, memo, useMemo } from 'react'; // Added memo
+import React, { useRef, memo, useMemo, useState } from 'react'; // Added memo, useState
 import 'katex/dist/katex.min.css';
 
 const LazyMarkdown = React.lazy(() => import('react-markdown'));
@@ -7,14 +7,10 @@ const remarkMath = import('remark-math');
 const rehypeKatex = import('rehype-katex');
 
 import CodeBlock from './CodeBlock';
-import AutoResizeTextarea from './AutoResizeTextarea';
 import ResizeHandle from './ResizeHandle';
-import MeetingRecorder from './MeetingRecorder';
-import { SendIcon, CameraIcon, XIcon, BrainIcon, CodeIcon, NinjaIcon, CheckIcon } from './Icons';
-import { WORKING_MODES } from '../modes';
 import { LOADER_FRAMES } from '../constants';
 import { DotLoader } from './ui/dot-loader';
-import { useState } from 'react';
+import { PromptInputBox } from './ui/ai-prompt-box';
 
 // Markdown components definition - Memoized outside component or useMemo
 const MARKDOWN_COMPONENTS = {
@@ -129,120 +125,32 @@ const ChatInterface = ({
     setWorkingMode,
     isCapturing
 }) => {
-    const [showModeMenu, setShowModeMenu] = useState(false);
-
-    const currentMode = WORKING_MODES.find(m => m.id === workingMode) || WORKING_MODES[0];
-
-    const getModeIcon = (modeId) => {
-        switch (modeId) {
-            case 'code': return <CodeIcon />;
-            case 'competitive': return <NinjaIcon />;
-            case 'quiz': return <CheckIcon />;
-            default: return <BrainIcon />;
-        }
-    };
-    
     return (
         <div className="flex-1 flex flex-col w-full relative overflow-hidden min-h-0">
             {/* Memoized Message List */}
             <MessageList messages={messages} />
 
-            <form onSubmit={handleSend} className="w-full p-3 relative py-2 bg-neutral-800/50 flex flex-col items-end ">
-                <div className="flex-1 min-w-full relative">
-                    <AutoResizeTextarea
-                        ref={inputRef}
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        onEnterPress={handleSend}
-                        placeholder="Ask ZNinja..."
-                    />
-                </div>
-                {attachments.length > 0 && (
-                    <div className="absolute bottom-14 left-4 z-10 flex gap-2 overflow-x-auto max-w-[calc(100%-6rem)] p-1 scrollbar-thin scrollbar-thumb-neutral-600">
-                        {attachments.map((img, idx) => (
-                            <div key={idx} className="relative w-24 h-16 border border-neutral-600 bg-black rounded overflow-hidden shadow-lg group shrink-0">
-                                <img src={img} className="w-full h-full object-cover opacity-70" alt={`Attachment ${idx}`} />
-                                <button 
-                                    type="button"
-                                    onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
-                                    className="absolute top-0 right-0 p-0.5 bg-red-600 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500 transition-all duration-200"
-                                    >
-                                    <XIcon />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Mode Selector */}
-                <div className="absolute left-4 bottom-[2.3rem] z-30">
-                    <button
-                        type="button"
-                        onClick={() => setShowModeMenu(!showModeMenu)}
-                        className="flex items-center translate-x-1 gap-1.5 px-2 py-1 bg-neutral-700/50 hover:bg-neutral-700 text-[10px] text-neutral-300 rounded border border-neutral-600 transition-all duration-200"
-                    >
-                        {getModeIcon(workingMode)}
-                        <span className="font-bold uppercase tracking-widest hidden sm:inline">{currentMode.label}</span>
-                    </button>
-
-                    {showModeMenu && (
-                        <>
-                            <div className="fixed inset-0 z-40" onClick={() => setShowModeMenu(false)} />
-                            <div className="absolute bottom-full left-0 mb-2 py-1 bg-neutral-800 border border-neutral-700 rounded-lg shadow-2xl z-50 min-w-[160px]">
-                                <div className="px-3 py-2 text-[10px] text-neutral-500 font-bold uppercase tracking-wider border-b border-neutral-700/50 mb-1">
-                                    Working Mode
-                                </div>
-                                {WORKING_MODES.map(mode => (
-                                    <button
-                                        key={mode.id}
-                                        type="button"
-                                        onClick={() => {
-                                            setWorkingMode(mode.id);
-                                            setShowModeMenu(false);
-                                        }}
-                                        className={`w-full text-left px-3 py-2 text-[11px] hover:bg-neutral-700 flex flex-col gap-0.5 transition-colors ${workingMode === mode.id ? 'text-emerald-400 bg-emerald-500/10' : 'text-neutral-400'}`}
-                                    >
-                                        <div className="flex items-center gap-2 font-bold uppercase tracking-wide">
-                                            {getModeIcon(mode.id)}
-                                            {mode.label}
-                                        </div>
-                                        <div className="text-[9px] text-neutral-500 leading-tight">
-                                            {mode.description}
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                 {/* Audio Recorder */}
-                <div className="absolute right-20 bottom-[2.29rem] z-20">
-                    <MeetingRecorder onRecordingComplete={handleSendAudio} />
-                </div>
-
-                <button
-                    type="submit"
-                    id="send-button"
-                    className="absolute right-12 bottom-[2.3rem] p-1 hover:bg-neutral-400/30 rounded-md text-neutral-200 transition-colors duration-200"
-                >
-                    <SendIcon />
-                </button>
+            <div className="w-full p-3 relative py-2 bg-neutral-800/20 flex flex-col gap-2">
+                <PromptInputBox
+                    inputRef={inputRef}
+                    value={inputValue}
+                    onValueChange={setInputValue}
+                    attachments={attachments}
+                    setAttachments={setAttachments}
+                    onSend={(formattedInput) => handleSend(null, formattedInput)}
+                    isLoading={messages.length > 0 && messages[messages.length - 1].isStreaming}
+                    placeholder="Ask ZNinja..."
+                    workingMode={workingMode}
+                    setWorkingMode={setWorkingMode}
+                    handleSendAudio={handleSendAudio}
+                    handleCapture={handleCapture}
+                    isCapturing={isCapturing}
+                />
                 
-               
-                <button
-                    type="button"
-                    disabled={isCapturing}
-                    className={`absolute right-5 bottom-[2.3rem] p-1 rounded-md transition-colors duration-200 z-10 ${isCapturing ? 'text-emerald-500 animate-pulse' : 'text-neutral-400 hover:text-white hover:bg-neutral-400/30'}`}
-                    onClick={handleCapture}
-                >
-                    {isCapturing ? (
-                        <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                        <CameraIcon />
-                    )}
-                </button>
-                <span className='text-xs w-full flex justify-center items-center '>powered by CInfinite, developed by <a href="https://github.com/gajju44" target="_blank" rel="noopener noreferrer">&nbsp;gajju44</a></span>
+                <span className="text-xs w-full flex justify-center items-center text-neutral-500 select-none">
+                    powered by CInfinite, developed by <a href="https://github.com/gajju44" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-300 transition-colors">&nbsp;gajju44</a>
+                </span>
+
                 <button
                     id="instant-ai-trigger"
                     type="button"
@@ -277,7 +185,7 @@ const ChatInterface = ({
                         }
                     }}
                 />
-            </form>
+            </div>
             <ResizeHandle />
         </div>
     );
