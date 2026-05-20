@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { MicIcon, StopCircleIcon, SaveIcon, PlayIcon, PauseIcon, VideoIcon, ChevronLeftIcon } from './Icons';
+import Tooltip from './ui/tooltip';
 
 // Extracted Timer Component to prevent parent re-renders
 const RecordingTimer = memo(({ isRecording }) => {
@@ -316,39 +317,46 @@ const MeetingRecorder = ({ onRecordingComplete }) => {
             {isRecording ? (
                 <div className="flex items-center translate-y-1 gap-2 bg-red-900/30 border border-red-500/50 rounded-full pl-3 pr-1 py-1 animate-pulse z-50">
                     <RecordingTimer isRecording={isRecording} />
-                    <button 
-                        onClick={stopRecording}
-                        className="p-1 rounded-full bg-red-600 hover:bg-red-500 text-white transition-colors"
-                    >
-                        <StopCircleIcon />
-                    </button>
+                    <Tooltip content="Stop Recording">
+                        <button 
+                            onClick={stopRecording}
+                            className="p-1 rounded-full bg-red-600 hover:bg-red-500 text-white transition-colors"
+                        >
+                            <StopCircleIcon />
+                        </button>
+                    </Tooltip>
                 </div>
             ) : (
                 <div className="flex items-center bg-neutral-800/50 rounded-full border border-neutral-700/50 overflow-hidden transition-all translate-y-[2px] translate-x-1 duration-300"
                      style={{ maxWidth: isExpanded ? '120px' : '27px' }}
                 >
                     <div className={`flex items-center gap-1 px-1 transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0 w-[0px] '}`}>
-                         <button
-                            onClick={() => startRecording('audio')}
-                            className="p-1.5 hover:text-emerald-400 text-neutral-400 transition-colors"
-                        >
-                            <MicIcon />
-                        </button>
-                        <button
-                            onClick={() => startRecording('video')}
-                            className="p-1.5 hover:text-emerald-400 text-neutral-400 transition-colors"
-                        >
-                            <VideoIcon />
-                        </button>
+                        <Tooltip content="Record Audio" disabled={!isExpanded}>
+                            <button
+                                onClick={() => startRecording('audio')}
+                                className="p-1.5 hover:text-emerald-400 text-neutral-400 transition-colors"
+                            >
+                                <MicIcon />
+                            </button>
+                        </Tooltip>
+                        <Tooltip content="Record Screen" disabled={!isExpanded}>
+                            <button
+                                onClick={() => startRecording('video')}
+                                className="p-1.5 hover:text-emerald-400 text-neutral-400 transition-colors"
+                            >
+                                <VideoIcon />
+                            </button>
+                        </Tooltip>
                     </div>
 
-                    <button
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        className={`p-1 -translate-x-2 w-fit text-neutral-400 hover:text-white transition-transform duration-300 ${isExpanded ? 'rotate-180' : 'rotate-0'}`}
-                       
-                    >
-                        <ChevronLeftIcon />
-                    </button>
+                    <Tooltip content={isExpanded ? "Collapse" : "Record Audio/Screen"}>
+                        <button
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className={`p-1 -translate-x-2 w-fit text-neutral-400 hover:text-white transition-transform duration-300 ${isExpanded ? 'rotate-180' : 'rotate-0'}`}
+                        >
+                            <ChevronLeftIcon />
+                        </button>
+                    </Tooltip>
                 </div>
             )}
         </div>

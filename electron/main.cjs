@@ -126,14 +126,30 @@ function createWindow() {
         });
     });
 
-    // Native / Window
     ipcMain.handle('capture-screen', async () => {
         try {
-            // Smaller size for faster processing, still high enough for OCR/Vision
+            // Hide the window first to prevent it from being caught in the screen capture
+            const wasVisible = win.isVisible();
+            if (wasVisible) {
+                win.hide();
+                // Allow a brief moment for the window manager / OS to finish hiding the window
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
+
             const sources = await desktopCapturer.getSources({
                 types: ['screen'],
                 thumbnailSize: { width: 1280, height: 720 }
             });
+
+            // Restore the window's exact visibility and focus state after capturing
+            if (wasVisible) {
+                win.show();
+                win.setSkipTaskbar(true);
+                win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+                win.setAlwaysOnTop(true, 'screen-saver');
+                if (win.isFocusable()) win.focus();
+            }
+
             const primarySource = sources[0];
             if (primarySource) {
                 return { success: true, image: primarySource.thumbnail.toDataURL() };
