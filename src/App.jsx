@@ -778,7 +778,9 @@ function App() {
                         >
                             <Canvas 
                                 artifact={activeArtifact} 
-                                onClose={closeCanvas} 
+                                onClose={closeCanvas}
+                                setInputValue={setInputValue}
+                                handleSend={handleSend}
                             />
                         </div>
                     </>

@@ -298,6 +298,146 @@ function createWindow() {
         autoUpdater.quitAndInstall();
     });
 
+    ipcMain.handle('run-code', async (_, { code, language, input }) => {
+        console.log(`\n==================================================`);
+        console.log(`[ZNinja Runner] IPC 'run-code' invocation received`);
+        console.log(`[ZNinja Runner] Language: ${language}`);
+        console.log(`[ZNinja Runner] Input size: ${input ? input.length : 0} chars`);
+
+        const { exec } = require('child_process');
+        const fs = require('fs');
+        const path = require('path');
+        
+        const runId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const runDir = path.join(app.getPath('temp'), 'zninja_runs', `run_${runId}`);
+        
+        if (!fs.existsSync(runDir)) {
+            console.log(`[ZNinja Runner] Creating run subdirectory: ${runDir}`);
+            fs.mkdirSync(runDir, { recursive: true });
+        } else {
+            console.log(`[ZNinja Runner] Using run subdirectory: ${runDir}`);
+        }
+
+        const inputPath = path.join(runDir, 'input.txt');
+        fs.writeFileSync(inputPath, input || '');
+        console.log(`[ZNinja Runner] Input file created: ${inputPath}`);
+
+        let fileExt = '';
+        let compileCmd = '';
+        let runCmd = '';
+        let fileName = 'solution';
+
+        const lang = language.toLowerCase();
+        
+        if (lang === 'python' || lang === 'py') {
+            fileExt = 'py';
+            runCmd = `python ${fileName}.py < input.txt`;
+        } else if (lang === 'cpp' || lang === 'c++') {
+            fileExt = 'cpp';
+            compileCmd = `g++ -O3 ${fileName}.cpp -o ${fileName}.exe`;
+            runCmd = `${fileName}.exe < input.txt`;
+        } else if (lang === 'java') {
+            let className = 'Main';
+            const publicClassMatch = code.match(/\bpublic\s+class\s+(\w+)/);
+            if (publicClassMatch) {
+                className = publicClassMatch[1];
+            } else {
+                const classRegex = /\bclass\s+(\w+)/g;
+                const classes = [];
+                let match;
+                while ((match = classRegex.exec(code)) !== null) {
+                    classes.push(match[1]);
+                }
+                if (classes.length > 0) {
+                    if (classes.includes('Main')) {
+                        className = 'Main';
+                    } else if (classes.includes('Solution')) {
+                        className = 'Solution';
+                    } else {
+                        className = classes[0];
+                    }
+                }
+            }
+            fileExt = 'java';
+            fileName = className;
+            compileCmd = `javac ${fileName}.java`;
+            runCmd = `java ${fileName} < input.txt`;
+        } else if (lang === 'javascript' || lang === 'js' || lang === 'nodejs') {
+            fileExt = 'js';
+            runCmd = `node ${fileName}.js < input.txt`;
+        } else {
+            console.log(`[ZNinja Runner] Unsupported language requested: ${language}`);
+            try {
+                if (fs.existsSync(runDir)) {
+                    fs.rmSync(runDir, { recursive: true, force: true });
+                }
+            } catch (err) {}
+            return {
+                success: false,
+                stdout: '',
+                stderr: `Unsupported language: ${language}`,
+                timeMs: 0,
+                errorType: 'unsupported'
+            };
+        }
+
+        const sourcePath = path.join(runDir, `${fileName}.${fileExt}`);
+        fs.writeFileSync(sourcePath, code);
+        console.log(`[ZNinja Runner] Written source code to: ${sourcePath}`);
+
+        const fullCommand = compileCmd ? `${compileCmd} && ${runCmd}` : runCmd;
+        console.log(`[ZNinja Runner] Executing command line: ${fullCommand}`);
+        
+        return new Promise((resolve) => {
+            const startTime = Date.now();
+            exec(fullCommand, { 
+                cwd: runDir, 
+                timeout: 5000, 
+                maxBuffer: 1024 * 1024 
+            }, (error, stdout, stderr) => {
+                const timeMs = Date.now() - startTime;
+                console.log(`[ZNinja Runner] Process execution finished in ${timeMs}ms`);
+                
+                // Cleanup temp run subdirectory
+                try {
+                    if (fs.existsSync(runDir)) {
+                        fs.rmSync(runDir, { recursive: true, force: true });
+                        console.log(`[ZNinja Runner] Cleaned run directory recursively: ${runDir}`);
+                    }
+                } catch (cleanupErr) {
+                    console.error("[ZNinja Runner] Cleanup error:", cleanupErr);
+                }
+
+                console.log(`[ZNinja Runner] stdout length: ${stdout ? stdout.length : 0} chars`);
+                console.log(`[ZNinja Runner] stderr length: ${stderr ? stderr.length : 0} chars`);
+
+                if (stdout) console.log(`[ZNinja Runner] --- Raw stdout ---\n${stdout}\n-----------------------`);
+                if (stderr) console.error(`[ZNinja Runner] --- Raw stderr ---\n${stderr}\n-----------------------`);
+
+                if (error) {
+                    const isTimeout = error.killed || error.signal === 'SIGTERM';
+                    console.error(`[ZNinja Runner] Execution failed. Error: ${error.message}`);
+                    resolve({
+                        success: false,
+                        stdout: stdout || '',
+                        stderr: isTimeout ? 'Execution Timed Out (Limit: 5 seconds)' : (stderr || error.message),
+                        timeMs,
+                        errorType: isTimeout ? 'timeout' : 'runtime'
+                    });
+                } else {
+                    console.log(`[ZNinja Runner] Execution completed with success.`);
+                    resolve({
+                        success: true,
+                        stdout: stdout || '',
+                        stderr: stderr || '',
+                        timeMs
+                    });
+                }
+                console.log(`==================================================\n`);
+            });
+        });
+    });
+
     // Ghost Typing
     let ghostTypingInterval = null;
     ipcMain.handle('set-ghost-typing', (event, active) => {

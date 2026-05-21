@@ -169,35 +169,44 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
         if (modelName === 'zninja-auto-smart' || !modelName.includes('deep-research')) {
             modelName = smartFallbacks[0];
         }
-    } else if (modelName === 'zninja-auto-smart') {
-        const lowerPrompt = prompt ? prompt.toLowerCase() : '';
-        const codingKeywords = ['code', 'fix', 'api', 'o(n)', 'implementation', 'logic', 'algorithm'];
-        const isComplex = image || audioData || codingKeywords.some(k => lowerPrompt.includes(k)) || (prompt && prompt.length > 300);
-
-        if (isComplex) {
-            console.log("ZNinja Router: Complex/Coding detected.");
-            smartFallbacks = [
-                "gemini-3.1-pro-preview",
-                "gemini-2.5-pro",
-                "gemini-3-pro-preview"
-            ];
-        } else {
-            console.log("ZNinja Router: Simple Chat detected.");
-            smartFallbacks = [
-                "gemini-2.5-flash-lite",
-                "gemini-3-flash-preview",
-                "gemini-2.5-flash"
-            ];
+    } else {
+        if (modelName && modelName.includes('deep-research')) {
+            modelName = 'zninja-auto-smart';
         }
-        modelName = smartFallbacks[0];
+        if (modelName === 'zninja-auto-smart') {
+            const lowerPrompt = prompt ? prompt.toLowerCase() : '';
+            const codingKeywords = ['code', 'fix', 'api', 'o(n)', 'implementation', 'logic', 'algorithm'];
+            const isComplex = image || audioData || codingKeywords.some(k => lowerPrompt.includes(k)) || (prompt && prompt.length > 300);
+
+            if (isComplex) {
+                console.log("ZNinja Router: Complex/Coding detected.");
+                smartFallbacks = [
+                    "gemini-3.1-pro-preview",
+                    "gemini-2.5-pro",
+                    "gemini-3-pro-preview"
+                ];
+            } else {
+                console.log("ZNinja Router: Simple Chat detected.");
+                smartFallbacks = [
+                    "gemini-2.5-flash-lite",
+                    "gemini-3-flash-preview",
+                    "gemini-2.5-flash"
+                ];
+            }
+            modelName = smartFallbacks[0];
+        }
     }
+
+    const baseFallbacks = workingMode === 'research' ? [
+        "deep-research-preview-04-2026",
+        "deep-research-max-preview-04-2026",
+        "deep-research-pro-preview-12-2025"
+    ] : [];
 
     const modelFallbacks = [
         ...smartFallbacks,
         modelName,
-        "deep-research-preview-04-2026",
-        "deep-research-max-preview-04-2026",
-        "deep-research-pro-preview-12-2025",
+        ...baseFallbacks,
         "gemini-2.0-flash-thinking-exp",
         "gemini-3-flash",
         "gemini-2.5-flash",
@@ -273,7 +282,7 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
 
                 const isThinkingModel = modelId.includes('thinking');
                 const isLegacyModel = modelId.includes('1.5') || modelId.includes('1.0');
-                const isDeepResearchModel = modelId.includes('deep-research');
+                const isDeepResearchModel = (workingMode === 'research') && modelId.includes('deep-research');
                  
                 if (isDeepResearchModel) {
                     const resultText = await runDeepResearch({
@@ -517,35 +526,44 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
         if (modelName === 'zninja-auto-smart' || !modelName.includes('deep-research')) {
             modelName = smartFallbacks[0];
         }
-    } else if (modelName === 'zninja-auto-smart') {
-        const lowerPrompt = prompt ? prompt.toLowerCase() : '';
-        const codingKeywords = ['code', 'fix', 'api', 'o(n)', 'implementation', 'logic', 'algorithm'];
-        const isComplex = image || codingKeywords.some(k => lowerPrompt.includes(k)) || (prompt && prompt.length > 300);
-
-        if (isComplex) {
-            console.log("ZNinja Router: Complex/Coding detected.");
-            smartFallbacks = [
-                "gemini-3.1-pro-preview",
-                "gemini-2.5-pro",
-                "gemini-3-pro-preview"
-            ];
-        } else {
-            console.log("ZNinja Router: Simple Chat detected.");
-            smartFallbacks = [
-                "gemini-2.5-flash-lite",
-                "gemini-3-flash-preview",
-                "gemini-2.5-flash"
-            ];
+    } else {
+        if (modelName && modelName.includes('deep-research')) {
+            modelName = 'zninja-auto-smart';
         }
-        modelName = smartFallbacks[0];
+        if (modelName === 'zninja-auto-smart') {
+            const lowerPrompt = prompt ? prompt.toLowerCase() : '';
+            const codingKeywords = ['code', 'fix', 'api', 'o(n)', 'implementation', 'logic', 'algorithm'];
+            const isComplex = image || codingKeywords.some(k => lowerPrompt.includes(k)) || (prompt && prompt.length > 300);
+
+            if (isComplex) {
+                console.log("ZNinja Router: Complex/Coding detected.");
+                smartFallbacks = [
+                    "gemini-3.1-pro-preview",
+                    "gemini-2.5-pro",
+                    "gemini-3-pro-preview"
+                ];
+            } else {
+                console.log("ZNinja Router: Simple Chat detected.");
+                smartFallbacks = [
+                    "gemini-2.5-flash-lite",
+                    "gemini-3-flash-preview",
+                    "gemini-2.5-flash"
+                ];
+            }
+            modelName = smartFallbacks[0];
+        }
     }
+
+    const baseFallbacks = workingMode === 'research' ? [
+        "deep-research-preview-04-2026",
+        "deep-research-max-preview-04-2026",
+        "deep-research-pro-preview-12-2025"
+    ] : [];
 
     const modelFallbacks = [
         ...smartFallbacks,
         modelName,
-        "deep-research-preview-04-2026",
-        "deep-research-max-preview-04-2026",
-        "deep-research-pro-preview-12-2025",
+        ...baseFallbacks,
         "gemini-2.0-flash-thinking-exp",
         "gemini-3-flash",
         "gemini-2.5-flash",
@@ -620,7 +638,7 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
 
                 const isThinkingModel = modelId.includes('thinking');
                 const isLegacyModel = modelId.includes('1.5') || modelId.includes('1.0');
-                const isDeepResearchModel = modelId.includes('deep-research');
+                const isDeepResearchModel = (workingMode === 'research') && modelId.includes('deep-research');
 
                 if (isDeepResearchModel) {
                     if (callbacks.onChunk) {
