@@ -106,7 +106,7 @@ const MessageItem = memo(({ msg }) => {
 // Extracted MessageList
 const MessageList = memo(({ messages }) => {
     return (
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 pt-12">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 pt-4">
             {messages.map((msg, idx) => (
                 <MessageItem key={idx} msg={msg} />
             ))}
