@@ -584,7 +584,7 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
 
   const [selectedImage, setSelectedImage] = React.useState(null);
   const [showSearch, setShowSearch] = React.useState(false);
-  const [showThink, setShowThink] = React.useState(workingMode === "competitive");
+  const [showThink, setShowThink] = React.useState(workingMode === "research");
   const [showCanvas, setShowCanvas] = React.useState(workingMode === "code");
 
   const uploadInputRef = React.useRef(null);
@@ -592,7 +592,7 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
 
   // Sync mode triggers with external workingMode state if they change
   React.useEffect(() => {
-    setShowThink(workingMode === "competitive");
+    setShowThink(workingMode === "research");
     setShowCanvas(workingMode === "code");
   }, [workingMode]);
 
@@ -608,7 +608,7 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
       setShowSearch(false);
       setShowCanvas(false);
       if (setWorkingMode) {
-        setWorkingMode(nextThink ? "competitive" : "general");
+        setWorkingMode(nextThink ? "research" : "general");
       }
     }
   };
@@ -706,7 +706,7 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
       let messagePrefix = "";
 
       if (showSearch) messagePrefix = "[Search: ";
-      else if (showThink) messagePrefix = "[Think: ";
+      else if (showThink) messagePrefix = "[Research: ";
       else if (showCanvas) messagePrefix = "[Canvas: ";
 
       const formattedInput = messagePrefix
@@ -838,7 +838,7 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
 
             <CustomDivider />
 
-            <PromptInputAction tooltip="Deep Think (Competitive Mode)">
+            <PromptInputAction tooltip="Deep Research (Native Google Research)">
               <Button
                 type="button"
                 variant="ghost"

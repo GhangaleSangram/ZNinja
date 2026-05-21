@@ -11,6 +11,11 @@ import ResizeHandle from './ResizeHandle';
 import { LOADER_FRAMES } from '../constants';
 import { DotLoader } from './ui/dot-loader';
 import { PromptInputBox } from './ui/ai-prompt-box';
+function cleanResearchSteps(text) {
+    if (!text || typeof text !== 'string') return text;
+    const regex = /^(?:\*\s*\*|)\s*\[Step\s*\d+\]\s*(?:Initializing deep research interaction|Research agent is scanning sources and analyzing data)[\s\S]*?(?:\*(?:\n|$)|(?:\n|$))/gm;
+    return text.replace(regex, '').trim();
+}
 
 // Markdown components definition - Memoized outside component or useMemo
 const MARKDOWN_COMPONENTS = {
@@ -78,7 +83,7 @@ const MessageItem = memo(({ msg }) => {
                                     rehypePlugins={plugins.rehype}
                                     components={MARKDOWN_COMPONENTS}
                                 >
-                                    {msg.text}
+                                    {msg.isStreaming ? msg.text : cleanResearchSteps(msg.text)}
                                 </LazyMarkdown>
                                 {msg.isStreaming && (
                                     <span className="inline-block w-2 h-4 ml-1 bg-emerald-500 animate-pulse align-middle"></span>
@@ -101,7 +106,7 @@ const MessageItem = memo(({ msg }) => {
 // Extracted MessageList
 const MessageList = memo(({ messages }) => {
     return (
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 pt-12">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 pt-4">
             {messages.map((msg, idx) => (
                 <MessageItem key={idx} msg={msg} />
             ))}

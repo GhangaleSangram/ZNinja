@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { CheckIcon, ClipboardIcon } from './Icons';
+import React, { useState, useContext } from 'react';
+import { CheckIcon, ClipboardIcon, SplitIcon } from './Icons';
+import { CanvasContext } from './CanvasContext';
 
 // Lazy-load our lightweight PrismLight wrapper instead of the full Prism bundle.
 // This keeps the initial JS parse budget tiny — the highlighter only downloads
@@ -18,6 +19,7 @@ const SyntaxHighlighter = React.lazy(() =>
 const CodeBlock = ({ inline, className, children, ...props }) => {
     const match = /language-(\w+)/.exec(className || '');
     const [isCopied, setIsCopied] = useState(false);
+    const { openInCanvas } = useContext(CanvasContext);
   
     const handleCopy = () => {
       navigator.clipboard.writeText(String(children));
@@ -35,12 +37,27 @@ const CodeBlock = ({ inline, className, children, ...props }) => {
 
     return (
       <div className="relative group w-full">
-        <button 
-          onClick={handleCopy}
-          className="absolute top-2 right-2 p-1.5 rounded-md bg-neutral-700/50 hover:bg-neutral-600 text-neutral-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
-        >
-          {isCopied ? <CheckIcon /> : <ClipboardIcon />}
-        </button>
+        <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 no-drag">
+          <button 
+            onClick={() => openInCanvas({
+              id: Date.now().toString(),
+              title: match ? `code.${match[1]}` : 'code.txt',
+              language: match ? match[1] : 'text',
+              code: String(children).trim()
+            })}
+            title="Open in Canvas"
+            className="p-1.5 rounded-md bg-neutral-700/50 hover:bg-emerald-600 hover:text-white text-neutral-400 transition-colors active:scale-95"
+          >
+            <SplitIcon />
+          </button>
+          <button 
+            onClick={handleCopy}
+            title="Copy Code"
+            className="p-1.5 rounded-md bg-neutral-700/50 hover:bg-neutral-600 text-neutral-400 hover:text-white transition-colors active:scale-95"
+          >
+            {isCopied ? <CheckIcon /> : <ClipboardIcon />}
+          </button>
+        </div>
         <React.Suspense fallback={<pre className="bg-black/50 p-4 rounded-lg animate-pulse text-xs text-neutral-500">Loading highlighter...</pre>}>
             <SyntaxHighlighter
               language={match ? match[1] : 'text'}

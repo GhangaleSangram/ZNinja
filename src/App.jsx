@@ -3,12 +3,63 @@ import SetupScreen from './components/SetupScreen';
 import TitleBar from './components/TitleBar';
 import ChatHistorySidebar from './components/ChatHistorySidebar';
 import ChatInterface from './components/ChatInterface';
+import { CanvasContext } from './components/CanvasContext';
+import Canvas from './components/Canvas';
 // import { DEFAULT_PERSONA } from './constants';
 // import { WORKING_MODES } from './modes';
 
+function cleanResearchSteps(text) {
+    if (!text || typeof text !== 'string') return text;
+    const regex = /^(?:\*\s*\*|)\s*\[Step\s*\d+\]\s*(?:Initializing deep research interaction|Research agent is scanning sources and analyzing data)[\s\S]*?(?:\*(?:\n|$)|(?:\n|$))/gm;
+    return text.replace(regex, '').trim();
+}
 
 function App() {
-  // ... existing state ...
+  // Canvas State & Handlers
+  const [activeArtifact, setActiveArtifact] = useState(null);
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [canvasWidth, setCanvasWidth] = useState(45); // width percentage
+  const [isResizing, setIsResizing] = useState(false);
+  const [canvasMode, setCanvasMode] = useState('split'); // 'split' | 'cover'
+
+  const openInCanvas = useCallback((artifact) => {
+      setActiveArtifact(artifact);
+      setCanvasOpen(true);
+  }, []);
+
+  const closeCanvas = useCallback(() => {
+      setCanvasOpen(false);
+      setCanvasMode('split');
+  }, []);
+
+  const startResize = useCallback((e) => {
+      e.preventDefault();
+      setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+      if (!isResizing) return;
+
+      const handleMouseMove = (e) => {
+          const containerWidth = window.innerWidth;
+          const newWidthPx = containerWidth - e.clientX;
+          const newPercentage = Math.max(25, Math.min(75, (newWidthPx / containerWidth) * 100));
+          setCanvasWidth(newPercentage);
+      };
+
+      const handleMouseUp = () => {
+          setIsResizing(false);
+      };
+
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+      };
+  }, [isResizing]);
+
   const [isStealth, setIsStealth] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
@@ -159,11 +210,11 @@ function App() {
         }
 
         if (window.electron.onGeminiChunk) {
-            unsubs.push(window.electron.onGeminiChunk(({ chunk }) => {
+            unsubs.push(window.electron.onGeminiChunk(({ chunk, replace }) => {
                 setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
                     if (lastMsg && lastMsg.isStreaming) {
-                        const updatedMsg = { ...lastMsg, text: lastMsg.text + chunk };
+                        const updatedMsg = { ...lastMsg, text: replace ? chunk : lastMsg.text + chunk };
                         return [...prev.slice(0, -1), updatedMsg];
                     }
                     return prev;
@@ -172,11 +223,17 @@ function App() {
         }
 
         if (window.electron.onGeminiDone) {
-            unsubs.push(window.electron.onGeminiDone(({ usedModel }) => {
+            unsubs.push(window.electron.onGeminiDone(({ usedModel, finalText }) => {
                 setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
-                    if (lastMsg && lastMsg.isStreaming) {
-                        const updatedMsg = { ...lastMsg, isStreaming: false, usedModel };
+                    if (lastMsg && (lastMsg.isStreaming || lastMsg.role === 'ai')) {
+                        const rawText = (finalText !== undefined && finalText !== null) ? finalText : lastMsg.text;
+                        const updatedMsg = { 
+                            ...lastMsg, 
+                            isStreaming: false, 
+                            usedModel,
+                            text: cleanResearchSteps(rawText)
+                        };
                         return [...prev.slice(0, -1), updatedMsg];
                     }
                     return prev;
@@ -328,12 +385,20 @@ function App() {
     setCurrentSessionId(Date.now().toString());
     setMessages([{ role: 'system', text: 'ZNinja is Ready.' }]);
     setShowHistory(false); 
+    setActiveArtifact(null);
+    setCanvasOpen(false);
   };
 
   const openSession = (session) => {
     setCurrentSessionId(session.id);
-    setMessages(session.messages);
+    const cleanedMessages = session.messages ? session.messages.map(m => ({
+        ...m,
+        text: cleanResearchSteps(m.text)
+    })) : [];
+    setMessages(cleanedMessages);
     setShowHistory(false);
+    setActiveArtifact(null);
+    setCanvasOpen(false);
   };
 
   const deleteSession = async (e, sessionId) => {
@@ -461,6 +526,9 @@ function App() {
       }
   }, []);
 
+
+
+
   const handleSend = useCallback((e, customText) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     const activeText = (typeof customText === 'string') ? customText : inputValue;
@@ -561,131 +629,166 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-neutral-900/50 text-white rounded-lg border border-neutral-700 shadow-2xl overflow-hidden backdrop-blur-sm relative">
-      
-      {/* Update Notification - Micro Pill Design */}
-      {updateStatus !== 'idle' && (
-        <div className="absolute top-[52px] left-1/2 z-[110] animate-slide-down-pill pointer-events-auto">
-            <div className="glass-morphism rounded-full px-2.5 py-1 shadow-[0_10px_25px_rgba(0,0,0,0.6)] ring-1 ring-white/20 flex items-center gap-2.5 overflow-hidden">
-                {/* Micro Progress Bar */}
-                {(updateStatus === 'checking' || updateStatus === 'downloading') && (
-                    <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-white/5 overflow-hidden">
-                        <div className={`h-full ${updateStatus === 'checking' ? 'bg-blue-400 animate-loading w-1/4' : 'bg-emerald-400 transition-all duration-300'}`} 
-                             style={updateStatus === 'downloading' ? { width: `${downloadProgress}%` } : {}} />
-                    </div>
+    <CanvasContext.Provider value={{ activeArtifact, canvasOpen, openInCanvas, closeCanvas, canvasMode, setCanvasMode }}>
+      {isResizing && (
+        <div className="fixed inset-0 z-[9999] cursor-col-resize pointer-events-auto bg-transparent" />
+      )}
+      <div className="flex h-screen bg-neutral-900/50 text-white rounded-lg border border-neutral-700 shadow-2xl overflow-hidden backdrop-blur-sm relative">
+        
+        {/* Update Notification - Micro Pill Design */}
+        {updateStatus !== 'idle' && (
+          <div className="absolute top-[52px] left-1/2 z-[110] animate-slide-down-pill pointer-events-auto">
+              <div className="glass-morphism rounded-full px-2.5 py-1 shadow-[0_10px_25px_rgba(0,0,0,0.6)] ring-1 ring-white/20 flex items-center gap-2.5 overflow-hidden">
+                  {/* Micro Progress Bar */}
+                  {(updateStatus === 'checking' || updateStatus === 'downloading') && (
+                      <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-white/5 overflow-hidden">
+                          <div className={`h-full ${updateStatus === 'checking' ? 'bg-blue-400 animate-loading w-1/4' : 'bg-emerald-400 transition-all duration-300'}`} 
+                               style={updateStatus === 'downloading' ? { width: `${downloadProgress}%` } : {}} />
+                      </div>
+                  )}
+
+                  {/* Status Dot with Glow */}
+                  <div className={`w-1.5 h-1.5 rounded-full relative ${
+                      updateStatus === 'checking' ? 'bg-blue-500 animate-pulse' :
+                      updateStatus === 'available' ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.5)]' :
+                      updateStatus === 'downloading' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
+                      updateStatus === 'ready' ? 'bg-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' :
+                      updateStatus === 'up-to-date' ? 'bg-emerald-400' :
+                      'bg-red-400'
+                  }`}>
+                      {(updateStatus === 'available' || updateStatus === 'ready') && (
+                          <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-current" />
+                      )}
+                  </div>
+
+                  {/* Status Text (Micro) */}
+                  <span className="text-[10px] font-bold text-white/80  tracking-widest whitespace-nowrap">
+                      {updateStatus === 'checking' && "Checking Updates..."}
+                      {updateStatus === 'available' && "Update Found"}
+                      {updateStatus === 'downloading' && `Downloading ${downloadProgress}%`}
+                      {updateStatus === 'ready' && "Restart Ready"}
+                      {updateStatus === 'up-to-date' && "ZNinja is All Updated!"}
+                      {updateStatus === 'error' && "Failed"}
+                  </span>
+
+                  {/* Contextual Action Button */}
+                  <div className="flex items-center gap-2 border-l border-white/10 pl-2">
+                      {updateStatus === 'available' && (
+                          <button 
+                              onClick={downloadUpdate}
+                              className="text-emerald-400 hover:text-emerald-300 text-[10px] font-black uppercase tracking-tighter transition-colors active:scale-90"
+                          >
+                              Get
+                          </button>
+                      )}
+                      {updateStatus === 'ready' && (
+                          <button 
+                              onClick={() => window.electron.installUpdate()}
+                              className="text-blue-400 hover:text-blue-300 text-[10px] font-black uppercase tracking-tighter transition-colors active:scale-90"
+                          >
+                              Now
+                          </button>
+                      )}
+                      <button 
+                          onClick={() => setUpdateStatus('idle')}
+                          className="text-white/30 hover:text-white transition-colors"
+                      >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      </button>
+                  </div>
+              </div>
+          </div>
+        )}
+
+        {/* Sidebar (History) */}
+        <ChatHistorySidebar 
+          sessions={sessions}
+          currentSessionId={currentSessionId}
+          showHistory={showHistory}
+          setShowHistory={setShowHistory}
+          openSession={openSession}
+          deleteSession={deleteSession}
+        />
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col w-full relative overflow-hidden min-h-0">
+            {/* Header */}
+            <TitleBar 
+              isStealth={isStealth}
+              toggleStealth={toggleStealth}
+              showHistory={showHistory}
+              setShowHistory={setShowHistory}
+              createNewSession={createNewSession}
+              handleClearKey={handleClearKey}
+              availableModels={availableModels}
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+              isFocusLocked={isFocusLocked}
+              toggleGhostTyping={toggleGhostTyping}
+              isGhostTyping={isGhostTyping}
+              isSmartMode={isSmartMode}
+              setIsSmartMode={setIsSmartMode}
+              toggleFocusLock={toggleFocusLock}
+              isClipboardSync={isClipboardSync}
+              setIsClipboardSync={setIsClipboardSync}
+              checkForUpdates={checkForUpdates}
+              updateStatus={updateStatus}
+            />
+
+            {/* Split Screen Container */}
+            <div className="flex-1 flex flex-row w-full relative overflow-hidden min-h-0 pt-11">
+                <div 
+                    className={`flex flex-col h-full overflow-hidden ${isResizing ? '' : 'transition-all duration-300'} ${canvasOpen && canvasMode === 'cover' ? 'hidden' : ''}`}
+                    style={{ width: canvasOpen ? (canvasMode === 'cover' ? '0%' : `${100 - canvasWidth}%`) : '100%' }}
+                >
+                    <ChatInterface
+                        messages={messages}
+                        setMessages={setMessages}
+                        inputValue={inputValue}
+                        setInputValue={setInputValue}
+                        attachments={attachments}
+                        setAttachments={setAttachments}
+                        handleSend={handleSend}
+                        handleCapture={handleCapture}
+                        handleSendAudio={handleSendAudio}
+                        inputRef={inputRef}
+                        selectedModel={selectedModel}
+                        workingMode={workingMode}
+                        setWorkingMode={setWorkingMode}
+                        isCapturing={isCapturing}
+                    />
+                </div>
+
+                {canvasOpen && (
+                    <>
+                        {/* Resizer Handle */}
+                        {canvasMode !== 'cover' && (
+                            <div 
+                                onMouseDown={startResize}
+                                className="w-[3px] hover:w-[5px] hover:bg-emerald-500/80 bg-neutral-800 cursor-col-resize transition-all duration-150 relative z-50 group active:bg-emerald-500"
+                            >
+                                <div className="absolute inset-y-0 -left-1.5 -right-1.5 cursor-col-resize" />
+                            </div>
+                        )}
+
+                        {/* Right side canvas panel */}
+                        <div 
+                            className={`h-full overflow-hidden border-l border-neutral-800/80 ${isResizing ? '' : 'transition-all duration-300'}`}
+                            style={{ width: canvasMode === 'cover' ? '100%' : `${canvasWidth}%` }}
+                        >
+                            <Canvas 
+                                artifact={activeArtifact} 
+                                onClose={closeCanvas}
+                                setInputValue={setInputValue}
+                                handleSend={handleSend}
+                            />
+                        </div>
+                    </>
                 )}
-
-                {/* Status Dot with Glow */}
-                <div className={`w-1.5 h-1.5 rounded-full relative ${
-                    updateStatus === 'checking' ? 'bg-blue-500 animate-pulse' :
-                    updateStatus === 'available' ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.5)]' :
-                    updateStatus === 'downloading' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
-                    updateStatus === 'ready' ? 'bg-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' :
-                    updateStatus === 'up-to-date' ? 'bg-emerald-400' :
-                    'bg-red-400'
-                }`}>
-                    {(updateStatus === 'available' || updateStatus === 'ready') && (
-                        <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-current" />
-                    )}
-                </div>
-
-                {/* Status Text (Micro) */}
-                <span className="text-[10px] font-bold text-white/80  tracking-widest whitespace-nowrap">
-                    {updateStatus === 'checking' && "Checking Updates..."}
-                    {updateStatus === 'available' && "Update Found"}
-                    {updateStatus === 'downloading' && `Downloading ${downloadProgress}%`}
-                    {updateStatus === 'ready' && "Restart Ready"}
-                    {updateStatus === 'up-to-date' && "ZNinja is All Updated!"}
-                    {updateStatus === 'error' && "Failed"}
-                </span>
-
-                {/* Contextual Action Button */}
-                <div className="flex items-center gap-2 border-l border-white/10 pl-2">
-                    {updateStatus === 'available' && (
-                        <button 
-                            onClick={downloadUpdate}
-                            className="text-emerald-400 hover:text-emerald-300 text-[10px] font-black uppercase tracking-tighter transition-colors active:scale-90"
-                        >
-                            Get
-                        </button>
-                    )}
-                    {updateStatus === 'ready' && (
-                        <button 
-                            onClick={() => window.electron.installUpdate()}
-                            className="text-blue-400 hover:text-blue-300 text-[10px] font-black uppercase tracking-tighter transition-colors active:scale-90"
-                        >
-                            Now
-                        </button>
-                    )}
-                    <button 
-                        onClick={() => setUpdateStatus('idle')}
-                        className="text-white/30 hover:text-white transition-colors"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                </div>
             </div>
         </div>
-      )}
-
-
-
-
-      {/* Sidebar (History) */}
-      <ChatHistorySidebar 
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        showHistory={showHistory}
-        setShowHistory={setShowHistory}
-        openSession={openSession}
-        deleteSession={deleteSession}
-      />
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col w-full relative">
-          
-          {/* Header */}
-          {/* Header */}
-          <TitleBar 
-            isStealth={isStealth}
-            toggleStealth={toggleStealth}
-            showHistory={showHistory}
-            setShowHistory={setShowHistory}
-            createNewSession={createNewSession}
-            handleClearKey={handleClearKey}
-            availableModels={availableModels}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            isFocusLocked={isFocusLocked}
-            toggleGhostTyping={toggleGhostTyping}
-            isGhostTyping={isGhostTyping}
-            isSmartMode={isSmartMode}
-            setIsSmartMode={setIsSmartMode}
-            toggleFocusLock={toggleFocusLock}
-            isClipboardSync={isClipboardSync}
-            setIsClipboardSync={setIsClipboardSync}
-            checkForUpdates={checkForUpdates}
-            updateStatus={updateStatus}
-          />
-
-          <ChatInterface
-              messages={messages}
-              setMessages={setMessages}
-              inputValue={inputValue}
-              setInputValue={setInputValue}
-              attachments={attachments}
-              setAttachments={setAttachments}
-              handleSend={handleSend}
-              handleCapture={handleCapture}
-              handleSendAudio={handleSendAudio}
-              inputRef={inputRef}
-              selectedModel={selectedModel}
-              workingMode={workingMode}
-              setWorkingMode={setWorkingMode}
-              isCapturing={isCapturing}
-          />
       </div>
-    </div>
+    </CanvasContext.Provider>
   );
 }
 

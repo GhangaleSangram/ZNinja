@@ -93,4 +93,5 @@ contextBridge.exposeInMainWorld('electron', {
     checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
     downloadUpdate: () => ipcRenderer.invoke('download-update'),
     installUpdate: () => ipcRenderer.invoke('install-update'),
+    runCode: (data) => ipcRenderer.invoke('run-code', data),
 });
