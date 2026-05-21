@@ -120,8 +120,8 @@ function createWindow() {
     ipcMain.handle('ask-gemini', async (_, payload) => gemini.askGemini(payload));
     ipcMain.on('stream-gemini', async (event, payload) => {
         gemini.streamGemini(payload, {
-            onChunk: (chunk) => win.webContents.send('gemini-chunk', { chunk }),
-            onDone: (usedModel) => win.webContents.send('gemini-done', { usedModel }),
+            onChunk: (chunk, replace = false) => win.webContents.send('gemini-chunk', { chunk, replace }),
+            onDone: (usedModel, finalText = null) => win.webContents.send('gemini-done', { usedModel, finalText }),
             onError: (error) => win.webContents.send('gemini-error', { error })
         });
     });

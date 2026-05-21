@@ -6,6 +6,11 @@ import ChatInterface from './components/ChatInterface';
 // import { DEFAULT_PERSONA } from './constants';
 // import { WORKING_MODES } from './modes';
 
+function cleanResearchSteps(text) {
+    if (!text || typeof text !== 'string') return text;
+    const regex = /^(?:\*\s*\*|)\s*\[Step\s*\d+\]\s*(?:Initializing deep research interaction|Research agent is scanning sources and analyzing data)[\s\S]*?(?:\*(?:\n|$)|(?:\n|$))/gm;
+    return text.replace(regex, '').trim();
+}
 
 function App() {
   // ... existing state ...
@@ -159,11 +164,11 @@ function App() {
         }
 
         if (window.electron.onGeminiChunk) {
-            unsubs.push(window.electron.onGeminiChunk(({ chunk }) => {
+            unsubs.push(window.electron.onGeminiChunk(({ chunk, replace }) => {
                 setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
                     if (lastMsg && lastMsg.isStreaming) {
-                        const updatedMsg = { ...lastMsg, text: lastMsg.text + chunk };
+                        const updatedMsg = { ...lastMsg, text: replace ? chunk : lastMsg.text + chunk };
                         return [...prev.slice(0, -1), updatedMsg];
                     }
                     return prev;
@@ -172,11 +177,17 @@ function App() {
         }
 
         if (window.electron.onGeminiDone) {
-            unsubs.push(window.electron.onGeminiDone(({ usedModel }) => {
+            unsubs.push(window.electron.onGeminiDone(({ usedModel, finalText }) => {
                 setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
-                    if (lastMsg && lastMsg.isStreaming) {
-                        const updatedMsg = { ...lastMsg, isStreaming: false, usedModel };
+                    if (lastMsg && (lastMsg.isStreaming || lastMsg.role === 'ai')) {
+                        const rawText = (finalText !== undefined && finalText !== null) ? finalText : lastMsg.text;
+                        const updatedMsg = { 
+                            ...lastMsg, 
+                            isStreaming: false, 
+                            usedModel,
+                            text: cleanResearchSteps(rawText)
+                        };
                         return [...prev.slice(0, -1), updatedMsg];
                     }
                     return prev;
@@ -332,7 +343,11 @@ function App() {
 
   const openSession = (session) => {
     setCurrentSessionId(session.id);
-    setMessages(session.messages);
+    const cleanedMessages = session.messages ? session.messages.map(m => ({
+        ...m,
+        text: cleanResearchSteps(m.text)
+    })) : [];
+    setMessages(cleanedMessages);
     setShowHistory(false);
   };
 
@@ -460,6 +475,9 @@ function App() {
           }
       }
   }, []);
+
+
+
 
   const handleSend = useCallback((e, customText) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();

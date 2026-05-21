@@ -58,13 +58,118 @@ async function listModels(explicitKey = null) {
     }
 }
 
+// Run Deep Research via Interactions API
+async function runDeepResearch({ prompt, modelId, apiKey, systemInstruction, onProgress }) {
+    console.log(`ZNinja REST: Starting Deep Research interaction for ${modelId}...`);
+    
+    const combinedInput = `${systemInstruction}\n\nUser Query: ${prompt}`;
+    const agentName = modelId.startsWith('models/') ? modelId.replace('models/', '') : modelId;
+    
+    // 1. Create Interaction
+    const createUrl = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`;
+    const createRes = await fetch(createUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Api-Revision': '2026-05-20'
+        },
+        body: JSON.stringify({
+            agent: agentName,
+            input: combinedInput,
+            background: true
+        })
+    });
+    
+    if (!createRes.ok) {
+        const errText = await createRes.text();
+        throw new Error(`Failed to initiate research interaction: ${createRes.status} ${createRes.statusText} - ${errText}`);
+    }
+    
+    const initialData = await createRes.json();
+    const interactionId = initialData.id;
+    if (!interactionId) {
+        throw new Error(`Did not receive interaction ID from API: ${JSON.stringify(initialData)}`);
+    }
+    
+    console.log(`ZNinja REST: Deep Research interaction created: ${interactionId}`);
+    
+    // 2. Poll Interaction
+    const resourcePath = interactionId.startsWith('interactions/') ? interactionId : `interactions/${interactionId}`;
+    const getUrl = `https://generativelanguage.googleapis.com/v1beta/${resourcePath}?key=${apiKey}`;
+    
+    let attempts = 0;
+    const maxAttempts = 120; // 10 minutes (polling every 5 seconds)
+    
+    while (attempts < maxAttempts) {
+        attempts++;
+        if (onProgress) {
+            onProgress(attempts);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        const pollRes = await fetch(getUrl, {
+            headers: {
+                'Api-Revision': '2026-05-20'
+            }
+        });
+        
+        if (!pollRes.ok) {
+            console.warn(`ZNinja REST: Polling failed on attempt ${attempts}: ${pollRes.statusText}`);
+            continue;
+        }
+        
+        const interaction = await pollRes.json();
+        const status = (interaction.status || '').toLowerCase();
+        
+        console.log(`ZNinja REST: Interaction ${interactionId} status: ${status} (attempt ${attempts})`);
+        
+        if (status === 'completed' || status === 'completed_with_refinement') {
+            let text = "";
+            if (interaction.steps && Array.isArray(interaction.steps)) {
+                for (let i = interaction.steps.length - 1; i >= 0; i--) {
+                    const step = interaction.steps[i];
+                    if (step.content && Array.isArray(step.content)) {
+                        const textPart = step.content.find(part => part.text);
+                        if (textPart) {
+                            text = textPart.text;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (!text) {
+                // Fallback: search all steps for any text part
+                text = JSON.stringify(interaction);
+            }
+            
+            return text;
+        } else if (status === 'failed' || status === 'cancelled') {
+            throw new Error(`Research interaction failed or was cancelled by the server. Status: ${status}`);
+        }
+    }
+    
+    throw new Error("Deep Research task timed out. Please check again later or try a shorter query.");
+}
+
 // Ask Gemini
 async function askGemini({ prompt, modelName, images, image, audioData, history = [], workingMode }) {
     let smartFallbacks = [];
     const isPro = await checkTierInternal();
 
     // --- SMART ROUTER LOGIC ---
-    if (modelName === 'zninja-auto-smart') {
+    if (workingMode === 'research') {
+        console.log("ZNinja Router: Deep Research active. Prioritizing native deep research models.");
+        smartFallbacks = [
+            "deep-research-preview-04-2026",
+            "deep-research-max-preview-04-2026",
+            "deep-research-pro-preview-12-2025"
+        ];
+        if (modelName === 'zninja-auto-smart' || !modelName.includes('deep-research')) {
+            modelName = smartFallbacks[0];
+        }
+    } else if (modelName === 'zninja-auto-smart') {
         const lowerPrompt = prompt ? prompt.toLowerCase() : '';
         const codingKeywords = ['code', 'fix', 'api', 'o(n)', 'implementation', 'logic', 'algorithm'];
         const isComplex = image || audioData || codingKeywords.some(k => lowerPrompt.includes(k)) || (prompt && prompt.length > 300);
@@ -90,6 +195,9 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
     const modelFallbacks = [
         ...smartFallbacks,
         modelName,
+        "deep-research-preview-04-2026",
+        "deep-research-max-preview-04-2026",
+        "deep-research-pro-preview-12-2025",
         "gemini-2.0-flash-thinking-exp",
         "gemini-3-flash",
         "gemini-2.5-flash",
@@ -120,6 +228,17 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
 - Use clean, idiomatic code with optimal time and space complexity.
 - Absolutely NO comments in the code, NO intro, NO outro, NO explanations, and NO conversational noise.
 - Output ONLY the ready-to-paste code block containing the complete solution that gives correct output on the provided testcases (if provided).`,
+
+        'research': `You are ZNinja, an Elite Research Analyst.
+- Conduct a deep, rigorous, and highly comprehensive research process.
+- Leverage web search results to fact-check, analyze, and synthesize in-depth findings.
+- Structure your output professionally:
+  1. Executive Summary: High-level overview of findings.
+  2. In-Depth Analysis: Detailed, structured sections with clear headings.
+  3. Key Takeaways: Bulleted list of critical insights.
+  4. Verified Sources: List active web URLs and citations.
+- Maintain an authoritative, objective, and analytical tone.
+- Eliminate all conversational fluff, intro, and outro.`,
 
         'quiz': `You are ZNinja, an Expert Academic Tutor.
 - Output the correct option immediately (e.g., "Option A: [Option Content]").
@@ -154,14 +273,28 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
 
                 const isThinkingModel = modelId.includes('thinking');
                 const isLegacyModel = modelId.includes('1.5') || modelId.includes('1.0');
-                
+                const isDeepResearchModel = modelId.includes('deep-research');
+                 
+                if (isDeepResearchModel) {
+                    const resultText = await runDeepResearch({
+                        prompt: prompt,
+                        modelId: modelId,
+                        apiKey: currentKey,
+                        systemInstruction: systemInstruction,
+                        onProgress: (attempt) => {
+                            console.log(`ZNinja REST: Researching... attempt ${attempt}`);
+                        }
+                    });
+                    return { success: true, text: resultText, usedModel: modelId };
+                }
+
                 const modelOptions = {
                     model: modelId,
                     systemInstruction: systemInstruction
                 };
 
-                // Enable Search Grounding by default for 2.x/3.x non-thinking models
-                if (!isThinkingModel && !isLegacyModel) {
+                // Enable Search Grounding by default for 2.x/3.x non-thinking, non-research models
+                if (!isThinkingModel && !isLegacyModel && !isDeepResearchModel) {
                     modelOptions.tools = [{ googleSearch: {} }];
                 }
 
@@ -374,7 +507,17 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
     const isPro = await checkTierInternal();
 
     // --- SMART ROUTER LOGIC ---
-    if (modelName === 'zninja-auto-smart') {
+    if (workingMode === 'research') {
+        console.log("ZNinja Router: Deep Research active. Prioritizing native deep research models.");
+        smartFallbacks = [
+            "deep-research-preview-04-2026",
+            "deep-research-max-preview-04-2026",
+            "deep-research-pro-preview-12-2025"
+        ];
+        if (modelName === 'zninja-auto-smart' || !modelName.includes('deep-research')) {
+            modelName = smartFallbacks[0];
+        }
+    } else if (modelName === 'zninja-auto-smart') {
         const lowerPrompt = prompt ? prompt.toLowerCase() : '';
         const codingKeywords = ['code', 'fix', 'api', 'o(n)', 'implementation', 'logic', 'algorithm'];
         const isComplex = image || codingKeywords.some(k => lowerPrompt.includes(k)) || (prompt && prompt.length > 300);
@@ -400,6 +543,9 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
     const modelFallbacks = [
         ...smartFallbacks,
         modelName,
+        "deep-research-preview-04-2026",
+        "deep-research-max-preview-04-2026",
+        "deep-research-pro-preview-12-2025",
         "gemini-2.0-flash-thinking-exp",
         "gemini-3-flash",
         "gemini-2.5-flash",
@@ -430,6 +576,17 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
 - Use clean, idiomatic code with optimal time and space complexity.
 - Absolutely NO comments in the code, NO intro, NO outro, NO explanations, and NO conversational noise.
 - Output ONLY the ready-to-paste code block containing the complete solution.`,
+
+        'research': `You are ZNinja, an Elite Research Analyst.
+- Conduct a deep, rigorous, and highly comprehensive research process.
+- Leverage web search results to fact-check, analyze, and synthesize in-depth findings.
+- Structure your output professionally:
+  1. Executive Summary: High-level overview of findings.
+  2. In-Depth Analysis: Detailed, structured sections with clear headings.
+  3. Key Takeaways: Bulleted list of critical insights.
+  4. Verified Sources: List active web URLs and citations.
+- Maintain an authoritative, objective, and analytical tone.
+- Eliminate all conversational fluff, intro, and outro.`,
 
         'quiz': `You are ZNinja, an Expert Academic Tutor.
 - Output the correct option immediately (e.g., "Option A: [Option Content]").
@@ -463,14 +620,49 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
 
                 const isThinkingModel = modelId.includes('thinking');
                 const isLegacyModel = modelId.includes('1.5') || modelId.includes('1.0');
+                const isDeepResearchModel = modelId.includes('deep-research');
+
+                if (isDeepResearchModel) {
+                    if (callbacks.onChunk) {
+                        callbacks.onChunk(`*   *[Step 1] Initializing deep research interaction with ${modelId}...*\n`);
+                    }
+                    const resultText = await runDeepResearch({
+                        prompt: prompt,
+                        modelId: modelId,
+                        apiKey: currentKey,
+                        systemInstruction: systemInstruction,
+                        onProgress: (attempt) => {
+                            if (callbacks.onChunk) {
+                                // Accumulate logs cleanly during progress
+                                let logs = "";
+                                for (let i = 1; i <= attempt + 1; i++) {
+                                    if (i === 1) {
+                                        logs += `*   *[Step 1] Initializing deep research interaction with ${modelId}...*\n`;
+                                    } else {
+                                        logs += `*   *[Step ${i}] Research agent is scanning sources and analyzing data... (running for ${(i - 1) * 5}s)*\n`;
+                                    }
+                                }
+                                callbacks.onChunk(logs, true);
+                            }
+                        }
+                    });
+                    if (callbacks.onChunk) {
+                        // Replace everything with the clean final report once ready
+                        callbacks.onChunk(resultText, true);
+                    }
+                    if (callbacks.onDone) {
+                        callbacks.onDone(modelId, resultText);
+                    }
+                    return; // Success!
+                }
 
                 const modelOptions = {
                     model: modelId,
                     systemInstruction: systemInstruction
                 };
 
-                // Enable Search Grounding by default for 2.x/3.x non-thinking models
-                if (!isThinkingModel && !isLegacyModel) {
+                // Enable Search Grounding by default for 2.x/3.x non-thinking, non-research models
+                if (!isThinkingModel && !isLegacyModel && !isDeepResearchModel) {
                     modelOptions.tools = [{ googleSearch: {} }];
                 }
 
