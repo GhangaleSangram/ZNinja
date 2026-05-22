@@ -362,14 +362,19 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
                             ]
                         });
                     } else if (allImages.length > 0) {
-                        let visionInstructions = "Analyze image directly.";
+                        let visionInstructions = "Analyze attachment directly.";
+                        if (allImages.every(img => img.startsWith("data:image/"))) {
+                            visionInstructions = "Analyze image directly.";
+                        } else if (allImages.every(img => img.startsWith("data:audio/"))) {
+                            visionInstructions = "Analyze audio directly.";
+                        }
                         if (workingMode === 'competitive') visionInstructions = "Solve the CP problem in the image.";
                         else if (workingMode === 'quiz') visionInstructions = "Solve this quiz question.";
 
                         const visionPrompt = `[VISION ACTIVE] ${visionInstructions}\n${prompt || ""}`;
                         const visionParts = [{ text: visionPrompt }];
                         allImages.forEach(img => {
-                            const mimeTypeMatch = img.match(/^data:(image\/[a-zA-Z]*);base64,/);
+                            const mimeTypeMatch = img.match(/^data:([^;]+);base64,/);
                             const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/png";
                             visionParts.push({ inlineData: { data: img.split(',')[1], mimeType: mimeType } });
                         });
@@ -734,14 +739,19 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
 
                 const executeStreamCall = async (activeModel) => {
                     if (allImages.length > 0) {
-                        let visionInstructions = "Analyze image directly.";
+                        let visionInstructions = "Analyze attachment directly.";
+                        if (allImages.every(img => img.startsWith("data:image/"))) {
+                            visionInstructions = "Analyze image directly.";
+                        } else if (allImages.every(img => img.startsWith("data:audio/"))) {
+                            visionInstructions = "Analyze audio directly.";
+                        }
                         if (workingMode === 'competitive') visionInstructions = "Solve the CP problem in the image.";
                         else if (workingMode === 'quiz') visionInstructions = "Solve this quiz question.";
 
                         const visionPrompt = `[VISION ACTIVE] ${visionInstructions}\n${prompt || ""}`;
                         const visionParts = [{ text: visionPrompt }];
                         allImages.forEach(img => {
-                            const mimeTypeMatch = img.match(/^data:(image\/[a-zA-Z]*);base64,/);
+                            const mimeTypeMatch = img.match(/^data:([^;]+);base64,/);
                             const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/png";
                             visionParts.push({ inlineData: { data: img.split(',')[1], mimeType: mimeType } });
                         });

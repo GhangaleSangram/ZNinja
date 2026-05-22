@@ -135,6 +135,26 @@ const ArrowUpIcon = ({ className, ...props }) => (
   </svg>
 );
 
+const AudioIcon = ({ className, ...props }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    {...props}
+  >
+    <path d="M9 18V5l12-2v13" />
+    <circle cx="6" cy="18" r="3" />
+    <circle cx="18" cy="16" r="3" />
+  </svg>
+);
+
 const styles = `
   *:focus-visible {
     outline-offset: 0 !important;
@@ -361,7 +381,7 @@ const ImageViewDialog = ({ imageUrl, onClose, isCapturing = false }) => {
 const PromptInputContext = React.createContext({
   isLoading: false,
   value: "",
-  setValue: () => {},
+  setValue: () => { },
   maxHeight: 240,
   onSubmit: undefined,
   disabled: false,
@@ -551,7 +571,7 @@ const CustomDivider = () => (
 const formatModelName = (modelName) => {
   if (!modelName) return "Select Model";
   const base = modelName.split('/').pop();
-  
+
   if (base.toLowerCase().includes("gemini")) {
     let formatted = base
       .replace(/-/g, ' ')
@@ -570,10 +590,10 @@ const formatModelName = (modelName) => {
 export const PromptInputBox = React.forwardRef((props, ref) => {
   const {
     value = "",
-    onValueChange = () => {},
+    onValueChange = () => { },
     attachments = [],
-    setAttachments = () => {},
-    onSend = () => {},
+    setAttachments = () => { },
+    onSend = () => { },
     isLoading = false,
     placeholder = "Type your message here...",
     className,
@@ -585,8 +605,8 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
     inputRef,
     availableModels = [],
     selectedModel = "",
-    setSelectedModel = () => {},
-    onStop = () => {},
+    setSelectedModel = () => { },
+    onStop = () => { },
   } = props;
 
   const [selectedImage, setSelectedImage] = React.useState(null);
@@ -619,13 +639,18 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
   };
 
   const processFile = (file) => {
-    if (!file.type.startsWith("image/")) {
-      console.log("Only image files are allowed");
+    const isImage = file.type.startsWith("image/");
+    const audioExtensions = [".mp3", ".wav", ".webm", ".ogg", ".m4a", ".flac", ".aac", ".opus", ".oga"];
+    const fileExtension = file.name ? file.name.substring(file.name.lastIndexOf(".")).toLowerCase() : "";
+    const isAudio = file.type.startsWith("audio/") || audioExtensions.includes(fileExtension);
+
+    if (!isImage && !isAudio) {
+      console.log("Only image and audio files are allowed");
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      console.log("File too large (max 10MB)");
+    if (file.size > (isAudio ? 100 * 1024 * 1024 : 10 * 1024 * 1024)) {
+      console.log(`File too large (max ${isAudio ? "100MB" : "10MB"})`);
       return;
     }
 
@@ -633,7 +658,17 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
 
     reader.onload = (e) => {
       if (e.target?.result) {
-        setAttachments((prev) => [...prev, e.target.result]);
+        let result = e.target.result;
+        // Rewrite dynamic base64 MIME header if detected as audio but resolves to application/octet-stream
+        if (isAudio) {
+          if (result.startsWith("data:application/octet-stream;")) {
+            const extension = fileExtension ? fileExtension.substring(1) : "mp3";
+            result = result.replace("data:application/octet-stream;", `data:audio/${extension};`);
+          } else if (result.startsWith("data:video/")) {
+            result = result.replace("data:video/", "data:audio/");
+          }
+        }
+        setAttachments((prev) => [...prev, result]);
       }
     };
 
@@ -655,10 +690,14 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
     e.stopPropagation();
 
     const droppedFiles = Array.from(e.dataTransfer.files);
-    const imageFiles = droppedFiles.filter((file) => file.type.startsWith("image/"));
+    const audioExtensions = [".mp3", ".wav", ".webm", ".ogg", ".m4a", ".flac", ".aac", ".opus", ".oga"];
+    const validFiles = droppedFiles.filter((file) => {
+      const fileExtension = file.name ? file.name.substring(file.name.lastIndexOf(".")).toLowerCase() : "";
+      return file.type.startsWith("image/") || file.type.startsWith("audio/") || audioExtensions.includes(fileExtension);
+    });
 
-    if (imageFiles.length > 0) {
-      processFile(imageFiles[0]);
+    if (validFiles.length > 0) {
+      processFile(validFiles[0]);
     }
   }, [attachments]);
 
@@ -676,13 +715,26 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
     if (!items) return;
 
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf("image") !== -1) {
+      const isImg = items[i].type.indexOf("image") !== -1;
+      const isAud = items[i].type.indexOf("audio") !== -1;
+      if (isImg || isAud) {
         const file = items[i].getAsFile();
 
         if (file) {
           e.preventDefault();
           processFile(file);
           break;
+        }
+      } else if (items[i].kind === "file") {
+        const file = items[i].getAsFile();
+        if (file) {
+          const audioExtensions = [".mp3", ".wav", ".webm", ".ogg", ".m4a", ".flac", ".aac", ".opus", ".oga"];
+          const fileExtension = file.name ? file.name.substring(file.name.lastIndexOf(".")).toLowerCase() : "";
+          if (audioExtensions.includes(fileExtension)) {
+            e.preventDefault();
+            processFile(file);
+            break;
+          }
         }
       }
     }
@@ -733,29 +785,56 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
         onDrop={handleDrop}
         isCapturing={isCapturing}
       >
-        {/* Attachment Image Previews */}
+        {/* Attachment Image/Audio Previews */}
         {attachments.length > 0 && (
           <div className="flex gap-2 p-2 px-3 border-b border-[#333333] mb-2 overflow-x-auto">
-            {attachments.map((imgUrl, idx) => (
-              <div
-                key={idx}
-                className="relative w-16 h-16 rounded-xl border border-[#444444] overflow-hidden group/file flex-shrink-0"
-              >
-                <img
-                  src={imgUrl}
-                  className="w-full h-full object-cover cursor-pointer"
-                  onClick={() => openImageModal(imgUrl)}
-                  alt={`Attachment ${idx}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFile(idx)}
-                  className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white/80 hover:text-white hover:bg-black/80 transition-all opacity-0 group-hover/file:opacity-100"
+            {attachments.map((imgUrl, idx) => {
+              const isAudio = imgUrl.startsWith("data:audio/") || imgUrl.startsWith("data:video/");
+              const audioExt = isAudio ? (() => {
+                const match = imgUrl.match(/^data:(?:audio|video)\/([a-zA-Z0-9]+)/);
+                if (match) {
+                  const sub = match[1].toLowerCase();
+                  if (sub === "mpeg") return ".mp3";
+                  return `.${sub}`;
+                }
+                return ".mp3";
+              })() : "";
+              return (
+                <div
+                  key={idx}
+                  className={cn(
+                    "relative rounded-xl border border-[#444444] overflow-hidden group/file flex-shrink-0",
+                    isAudio ? "w-28 h-16 bg-neutral-950/80 border-emerald-500/20 p-2.5 flex flex-col justify-between" : "w-16 h-16"
+                  )}
                 >
-                  <XIcon className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
+                  {isAudio ? (
+                    <>
+                      <div className="flex items-center gap-1.5 text-emerald-400">
+                        <AudioIcon className="h-4 w-4 animate-pulse" />
+                        <span className="text-[10px] font-mono tracking-wider font-semibold uppercase text-emerald-400/90">AUDIO</span>
+                      </div>
+                      <div className="text-[9px] text-neutral-400 truncate font-mono">
+                        {imgUrl.length > 30 ? `file_${idx}${audioExt}` : "audio"}
+                      </div>
+                    </>
+                  ) : (
+                    <img
+                      src={imgUrl}
+                      className="w-full h-full object-cover cursor-pointer"
+                      onClick={() => openImageModal(imgUrl)}
+                      alt={`Attachment ${idx}`}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(idx)}
+                    className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white/80 hover:text-white hover:bg-black/80 transition-all opacity-0 group-hover/file:opacity-100 z-10"
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -770,16 +849,17 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
             const fileList = e.target.files;
             if (fileList && fileList.length > 0) {
               processFile(fileList[0]);
+              e.target.value = ""; // Reset value so the exact same file can be selected again
             }
           }}
-          accept="image/*"
+          accept="image/*,audio/*"
           className="hidden"
         />
 
         {/* Bottom Actions Row */}
         <div className="flex items-center justify-between mt-2 pt-1 border-t border-[#333333]/10 px-1 sm:px-2">
           <PromptInputActions>
-            <PromptInputAction tooltip="Upload Image">
+            <PromptInputAction tooltip="Upload Image/Audio">
               <Button
                 type="button"
                 variant="ghost"
@@ -862,7 +942,7 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
             {/* Model Dropdown */}
             {availableModels.length > 0 && (
               <div className="relative">
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowModelMenu(!showModelMenu)}
                   className="bg-neutral-800/60 hover:bg-neutral-700/80 text-[11px] text-neutral-300 px-2.5 py-1 rounded-md border border-white/5 flex items-center gap-1.5 transition-all duration-200 font-mono"
@@ -870,7 +950,7 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
                   <span>{selectedModel.split('/').pop()}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${showModelMenu ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
-                
+
                 {showModelMenu && (
                   <>
                     <div className="fixed inset-0 z-[1000]" onClick={() => setShowModelMenu(false)} />
@@ -914,8 +994,8 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
                   size="icon"
                   className={cn(
                     "rounded-full shadow-lg h-[34px] w-[34px] active:scale-95 transition-all",
-                    hasContent 
-                      ? "bg-white text-black hover:bg-white/90" 
+                    hasContent
+                      ? "bg-white text-black hover:bg-white/90"
                       : "bg-[#2E3033] text-gray-500 cursor-not-allowed"
                   )}
                   onClick={handleSubmit}
