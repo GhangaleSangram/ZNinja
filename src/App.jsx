@@ -567,17 +567,31 @@ function App() {
     }
   }, [inputValue, currentSessionId, attachments, messages, isSmartMode, selectedModel, workingMode]);
 
+  const handleStopGeneration = useCallback(() => {
+    if (window.electron && window.electron.stopGemini) {
+      window.electron.stopGemini();
+    }
+    setMessages(prev => {
+      const lastMsg = prev[prev.length - 1];
+      if (lastMsg && lastMsg.isStreaming) {
+        return [...prev.slice(0, -1), { ...lastMsg, isStreaming: false }];
+      }
+      return prev;
+    });
+  }, []);
+
+
   const handleSendAudio = useCallback((audioBase64) => {
       if (window.electron && window.electron.askGemini) {
           if (!currentSessionId) setCurrentSessionId(Date.now().toString());
           
           setMessages(prev => [...prev, { 
               role: 'user', 
-              text: '🎤 [Audio Recording]', 
+              text: '[Audio Recording]', 
               audio: true // Marker for UI if needed
           }]);
 
-          setMessages(prev => [...prev, { role: 'ai', text: '🎧 Listening and Transcribing...', isTemp: true }]);
+          setMessages(prev => [...prev, { role: 'ai', text: 'Listening and Transcribing...', isTemp: true }]);
 
           const history = messages
             .filter(m => !m.isTemp && !m.isStreaming && m.role !== 'system')
@@ -720,9 +734,6 @@ function App() {
               setShowHistory={setShowHistory}
               createNewSession={createNewSession}
               handleClearKey={handleClearKey}
-              availableModels={availableModels}
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
               isFocusLocked={isFocusLocked}
               toggleGhostTyping={toggleGhostTyping}
               isGhostTyping={isGhostTyping}
@@ -753,9 +764,12 @@ function App() {
                         handleSendAudio={handleSendAudio}
                         inputRef={inputRef}
                         selectedModel={selectedModel}
+                        availableModels={availableModels}
+                        setSelectedModel={setSelectedModel}
                         workingMode={workingMode}
                         setWorkingMode={setWorkingMode}
                         isCapturing={isCapturing}
+                        onStop={handleStopGeneration}
                     />
                 </div>
 

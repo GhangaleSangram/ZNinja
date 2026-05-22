@@ -126,9 +126,12 @@ const ChatInterface = ({
     handleSendAudio,
     inputRef,
     selectedModel,
+    availableModels,
+    setSelectedModel,
     workingMode,
     setWorkingMode,
-    isCapturing
+    isCapturing,
+    onStop
 }) => {
     return (
         <div className="flex-1 flex flex-col w-full relative overflow-hidden min-h-0">
@@ -144,12 +147,16 @@ const ChatInterface = ({
                     setAttachments={setAttachments}
                     onSend={(formattedInput) => handleSend(null, formattedInput)}
                     isLoading={messages.length > 0 && messages[messages.length - 1].isStreaming}
+                    onStop={onStop}
                     placeholder="Ask ZNinja..."
                     workingMode={workingMode}
                     setWorkingMode={setWorkingMode}
                     handleSendAudio={handleSendAudio}
                     handleCapture={handleCapture}
                     isCapturing={isCapturing}
+                    selectedModel={selectedModel}
+                    availableModels={availableModels}
+                    setSelectedModel={setSelectedModel}
                 />
                 
                 <span className="text-xs w-full flex justify-center items-center text-neutral-500 select-none">

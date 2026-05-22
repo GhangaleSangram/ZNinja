@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electron', {
     listModels: () => ipcRenderer.invoke('list-models'),
     askGemini: (data) => ipcRenderer.invoke('ask-gemini', data),
     streamGemini: (data) => ipcRenderer.send('stream-gemini', data),
+    stopGemini: () => ipcRenderer.send('stop-gemini'),
     onGeminiChunk: (callback) => {
         const subscription = (event, data) => callback(data);
         ipcRenderer.on('gemini-chunk', subscription);

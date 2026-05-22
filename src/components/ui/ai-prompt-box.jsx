@@ -116,26 +116,6 @@ const BrainCogIcon = ({ className, ...props }) => (
   </svg>
 );
 
-const FolderCodeIcon = ({ className, ...props }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    {...props}
-  >
-    <path d="M10 10.5 8 13l2 2.5" />
-    <path d="m14 10.5 2 2.5-2 2.5" />
-    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" />
-  </svg>
-);
-
 const ArrowUpIcon = ({ className, ...props }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -188,6 +168,10 @@ const styles = `
       opacity: 1;
       transform: scale(1);
     }
+  }
+  .animate-scale-in {
+    animation: scaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    transform-origin: bottom right;
   }
 `;
 
@@ -563,6 +547,25 @@ const CustomDivider = () => (
   </div>
 );
 
+// Beautiful model name formatting helper
+const formatModelName = (modelName) => {
+  if (!modelName) return "Select Model";
+  const base = modelName.split('/').pop();
+  
+  if (base.toLowerCase().includes("gemini")) {
+    let formatted = base
+      .replace(/-/g, ' ')
+      .replace(/\b(gemini)\b/gi, 'Gemini')
+      .replace(/\b(flash)\b/gi, 'Flash')
+      .replace(/\b(pro)\b/gi, 'Pro')
+      .replace(/\b(latest)\b/gi, '')
+      .replace(/\b(exp)\b/gi, '(Exp)')
+      .trim();
+    return formatted;
+  }
+  return base;
+};
+
 // Main Prompt Input Box component
 export const PromptInputBox = React.forwardRef((props, ref) => {
   const {
@@ -580,12 +583,16 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
     handleCapture,
     isCapturing = false,
     inputRef,
+    availableModels = [],
+    selectedModel = "",
+    setSelectedModel = () => {},
+    onStop = () => {},
   } = props;
 
   const [selectedImage, setSelectedImage] = React.useState(null);
   const [showSearch, setShowSearch] = React.useState(false);
   const [showThink, setShowThink] = React.useState(workingMode === "research");
-  const [showCanvas, setShowCanvas] = React.useState(workingMode === "code");
+  const [showModelMenu, setShowModelMenu] = React.useState(false);
 
   const uploadInputRef = React.useRef(null);
   const promptBoxRef = React.useRef(null);
@@ -593,7 +600,6 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
   // Sync mode triggers with external workingMode state if they change
   React.useEffect(() => {
     setShowThink(workingMode === "research");
-    setShowCanvas(workingMode === "code");
   }, [workingMode]);
 
   const handleToggleChange = (value) => {
@@ -606,20 +612,9 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
       const nextThink = !showThink;
       setShowThink(nextThink);
       setShowSearch(false);
-      setShowCanvas(false);
       if (setWorkingMode) {
         setWorkingMode(nextThink ? "research" : "general");
       }
-    }
-  };
-
-  const handleCanvasToggle = () => {
-    const nextCanvas = !showCanvas;
-    setShowCanvas(nextCanvas);
-    setShowSearch(false);
-    setShowThink(false);
-    if (setWorkingMode) {
-      setWorkingMode(nextCanvas ? "code" : "general");
     }
   };
 
@@ -707,7 +702,6 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
 
       if (showSearch) messagePrefix = "[Search: ";
       else if (showThink) messagePrefix = "[Research: ";
-      else if (showCanvas) messagePrefix = "[Canvas: ";
 
       const formattedInput = messagePrefix
         ? `${messagePrefix}${value}]`
@@ -853,23 +847,6 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
               </Button>
             </PromptInputAction>
 
-            <CustomDivider />
-
-            <PromptInputAction tooltip="Canvas View (Write Code)">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "rounded-full transition-all duration-200 hover:bg-white/10 h-8 w-8",
-                  showCanvas ? "text-[#9b87f5]" : "text-gray-400 hover:text-white"
-                )}
-                onClick={handleCanvasToggle}
-              >
-                <FolderCodeIcon className="h-[18px] w-[18px]" />
-              </Button>
-            </PromptInputAction>
-
             {handleSendAudio && (
               <>
                 <CustomDivider />
@@ -881,25 +858,73 @@ export const PromptInputBox = React.forwardRef((props, ref) => {
             )}
           </PromptInputActions>
 
-          {/* Action button: Send */}
-          <div>
-            <PromptInputAction tooltip="Send Prompt">
-              <Button
-                type="button"
-                variant="default"
-                size="icon"
-                className={cn(
-                  "rounded-full shadow-lg h-[34px] w-[34px] active:scale-95 transition-all",
-                  hasContent 
-                    ? "bg-white text-black hover:bg-white/90" 
-                    : "bg-[#2E3033] text-gray-500 cursor-not-allowed"
+          <div className="flex items-center gap-2 relative">
+            {/* Model Dropdown */}
+            {availableModels.length > 0 && (
+              <div className="relative">
+                <button 
+                  type="button"
+                  onClick={() => setShowModelMenu(!showModelMenu)}
+                  className="bg-neutral-800/60 hover:bg-neutral-700/80 text-[11px] text-neutral-300 px-2.5 py-1 rounded-md border border-white/5 flex items-center gap-1.5 transition-all duration-200 font-mono"
+                >
+                  <span>{selectedModel.split('/').pop()}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${showModelMenu ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                
+                {showModelMenu && (
+                  <>
+                    <div className="fixed inset-0 z-[1000]" onClick={() => setShowModelMenu(false)} />
+                    <div className="absolute bottom-full right-0 mb-2 py-1 bg-neutral-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl z-[1001] min-w-[220px] max-h-64 overflow-y-auto">
+                      {availableModels.map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel(m);
+                            setShowModelMenu(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-[11px] hover:bg-white/5 transition-colors font-mono ${selectedModel === m ? 'text-emerald-400 bg-emerald-400/5' : 'text-neutral-400'}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
-                onClick={handleSubmit}
-                disabled={!hasContent || isLoading}
-              >
-                <ArrowUpIcon className="h-[18px] w-[18px] stroke-[2.5]" />
-              </Button>
-            </PromptInputAction>
+              </div>
+            )}
+
+            {isLoading ? (
+              <PromptInputAction tooltip="Stop Generating">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="rounded-full h-[34px] w-[34px] active:scale-95 transition-all border-2 border-rose-500/30  hover:bg-rose-500/25 flex items-center justify-center "
+                  onClick={onStop}
+                >
+                  <div className="w-2.5 h-2.5 bg-rose-500 rounded-sm" />
+                </Button>
+              </PromptInputAction>
+            ) : (
+              <PromptInputAction tooltip="Send Prompt">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="icon"
+                  className={cn(
+                    "rounded-full shadow-lg h-[34px] w-[34px] active:scale-95 transition-all",
+                    hasContent 
+                      ? "bg-white text-black hover:bg-white/90" 
+                      : "bg-[#2E3033] text-gray-500 cursor-not-allowed"
+                  )}
+                  onClick={handleSubmit}
+                  disabled={!hasContent}
+                >
+                  <ArrowUpIcon className="h-[18px] w-[18px] stroke-[2.5]" />
+                </Button>
+              </PromptInputAction>
+            )}
           </div>
         </div>
       </PromptInput>
