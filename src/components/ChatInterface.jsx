@@ -58,12 +58,40 @@ const MessageItem = memo(({ msg }) => {
                 ? 'bg-emerald-500/30' 
                 : (msg.isStreaming && !msg.text) ? 'bg-transparent' : 'bg-zinc-800/50'
             }`}>
-                {msg.images && msg.images.map((img, i) => (
-                    <img key={i} src={img} alt={`Attachment ${i}`} className="max-w-xs max-h-48 rounded mb-2 border border-neutral-600/50 block" />
-                ))}
-                {msg.image && !msg.images && (
-                    <img src={msg.image} alt="Attachment" className="max-w-xs max-h-48 rounded mb-2 border border-neutral-600/50 block" />
-                )}
+                {msg.images && msg.images.map((img, i) => {
+                    const isAudio = img.startsWith("data:audio/") || img.startsWith("data:video/");
+                    if (isAudio) {
+                        return (
+                            <div key={i} className="mb-2 bg-neutral-900/60 rounded-xl p-3 border border-emerald-500/20 max-w-sm flex flex-col gap-2">
+                                <div className="flex items-center gap-2 text-emerald-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-pulse"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+                                    <span className="text-xs font-mono font-bold uppercase tracking-wider">Audio Attachment</span>
+                                </div>
+                                <audio src={img} controls className="w-full h-8 accent-emerald-500 rounded-md outline-none bg-transparent" />
+                            </div>
+                        );
+                    }
+                    return (
+                        <img key={i} src={img} alt={`Attachment ${i}`} className="max-w-xs max-h-48 rounded mb-2 border border-neutral-600/50 block" />
+                    );
+                })}
+                {msg.image && !msg.images && (() => {
+                    const isAudio = msg.image.startsWith("data:audio/") || msg.image.startsWith("data:video/");
+                    if (isAudio) {
+                        return (
+                            <div className="mb-2 bg-neutral-900/60 rounded-xl p-3 border border-emerald-500/20 max-w-sm flex flex-col gap-2">
+                                <div className="flex items-center gap-2 text-emerald-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-pulse"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+                                    <span className="text-xs font-mono font-bold uppercase tracking-wider">Audio Attachment</span>
+                                </div>
+                                <audio src={msg.image} controls className="w-full h-8 accent-emerald-500 rounded-md outline-none bg-transparent" />
+                            </div>
+                        );
+                    }
+                    return (
+                        <img src={msg.image} alt="Attachment" className="max-w-xs max-h-48 rounded mb-2 border border-neutral-600/50 block" />
+                    );
+                })()}
                 {msg.role === 'ai' ? (
                     <React.Suspense fallback={<div className="animate-pulse text-xs text-neutral-500 italic">Processing response...</div>}>
                         {msg.isStreaming && !msg.text ? (
@@ -126,9 +154,12 @@ const ChatInterface = ({
     handleSendAudio,
     inputRef,
     selectedModel,
+    availableModels,
+    setSelectedModel,
     workingMode,
     setWorkingMode,
-    isCapturing
+    isCapturing,
+    onStop
 }) => {
     return (
         <div className="flex-1 flex flex-col w-full relative overflow-hidden min-h-0">
@@ -144,12 +175,16 @@ const ChatInterface = ({
                     setAttachments={setAttachments}
                     onSend={(formattedInput) => handleSend(null, formattedInput)}
                     isLoading={messages.length > 0 && messages[messages.length - 1].isStreaming}
+                    onStop={onStop}
                     placeholder="Ask ZNinja..."
                     workingMode={workingMode}
                     setWorkingMode={setWorkingMode}
                     handleSendAudio={handleSendAudio}
                     handleCapture={handleCapture}
                     isCapturing={isCapturing}
+                    selectedModel={selectedModel}
+                    availableModels={availableModels}
+                    setSelectedModel={setSelectedModel}
                 />
                 
                 <span className="text-xs w-full flex justify-center items-center text-neutral-500 select-none">

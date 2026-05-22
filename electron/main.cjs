@@ -125,6 +125,9 @@ function createWindow() {
             onError: (error) => win.webContents.send('gemini-error', { error })
         });
     });
+    ipcMain.on('stop-gemini', () => {
+        gemini.abortActiveStream();
+    });
 
     ipcMain.handle('capture-screen', async () => {
         try {

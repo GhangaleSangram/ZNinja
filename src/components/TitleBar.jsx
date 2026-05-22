@@ -14,9 +14,6 @@ const TitleBar = ({
     setShowHistory,
     createNewSession,
     handleClearKey,
-    availableModels,
-    selectedModel,
-    setSelectedModel,
     isFocusLocked,
     isSmartMode,
     setIsSmartMode,
@@ -28,8 +25,6 @@ const TitleBar = ({
     checkForUpdates,
     updateStatus
 }) => {
-
-    const [showModelMenu, setShowModelMenu] = useState(false);
 
     return (
         <div 
@@ -81,36 +76,7 @@ const TitleBar = ({
                         </button>
                     </Tooltip>
 
-                    {/* Model Dropdown */}
-                    <div className="relative ml-1">
-                        <button 
-                            onClick={() => setShowModelMenu(!showModelMenu)}
-                            className="bg-neutral-800/60 hover:bg-neutral-700/80 text-[11px] text-neutral-300 px-2.5 py-1 rounded-md border border-white/5 flex items-center gap-1.5 transition-all duration-200 font-mono"
-                        >
-                            <span>{selectedModel.split('/').pop()}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${showModelMenu ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"></polyline></svg>
-                        </button>
-                        
-                        {showModelMenu && (
-                            <>
-                                <div className="fixed inset-0 z-[60]" onClick={() => setShowModelMenu(false)} />
-                                <div className="absolute top-full left-0 mt-2 py-1 bg-neutral-900/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl z-[70] min-w-[220px] max-h-64 overflow-y-auto">
-                                    {availableModels.map(m => (
-                                        <button
-                                            key={m}
-                                            onClick={() => {
-                                                setSelectedModel(m);
-                                                setShowModelMenu(false);
-                                            }}
-                                            className={`w-full text-left px-4 py-2 text-[11px] hover:bg-white/5 transition-colors font-mono ${selectedModel === m ? 'text-emerald-400 bg-emerald-400/5' : 'text-neutral-400'}`}
-                                        >
-                                            {m}
-                                        </button>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
+
                 </div>
             </div>
             

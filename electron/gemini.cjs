@@ -7,6 +7,16 @@ async function checkTierInternal() {
     return false;
 }
 
+let activeAbortController = null;
+
+function abortActiveStream() {
+    if (activeAbortController) {
+        console.log("ZNinja Gemini: Aborting active stream...");
+        activeAbortController.abort();
+        activeAbortController = null;
+    }
+}
+
 // List Models
 async function listModels(explicitKey = null) {
     try {
@@ -59,9 +69,13 @@ async function listModels(explicitKey = null) {
 }
 
 // Run Deep Research via Interactions API
-async function runDeepResearch({ prompt, modelId, apiKey, systemInstruction, onProgress }) {
+async function runDeepResearch({ prompt, modelId, apiKey, systemInstruction, onProgress, signal }) {
     console.log(`ZNinja REST: Starting Deep Research interaction for ${modelId}...`);
     
+    if (signal && signal.aborted) {
+        throw new Error("STREAM_ABORTED");
+    }
+
     const combinedInput = `${systemInstruction}\n\nUser Query: ${prompt}`;
     const agentName = modelId.startsWith('models/') ? modelId.replace('models/', '') : modelId;
     
@@ -77,7 +91,8 @@ async function runDeepResearch({ prompt, modelId, apiKey, systemInstruction, onP
             agent: agentName,
             input: combinedInput,
             background: true
-        })
+        }),
+        signal: signal
     });
     
     if (!createRes.ok) {
@@ -106,12 +121,19 @@ async function runDeepResearch({ prompt, modelId, apiKey, systemInstruction, onP
             onProgress(attempts);
         }
         
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Interruptible Sleep loop
+        for (let i = 0; i < 50; i++) {
+            if (signal && signal.aborted) {
+                throw new Error("STREAM_ABORTED");
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
         
         const pollRes = await fetch(getUrl, {
             headers: {
                 'Api-Revision': '2026-05-20'
-            }
+            },
+            signal: signal
         });
         
         if (!pollRes.ok) {
@@ -340,14 +362,19 @@ async function askGemini({ prompt, modelName, images, image, audioData, history 
                             ]
                         });
                     } else if (allImages.length > 0) {
-                        let visionInstructions = "Analyze image directly.";
+                        let visionInstructions = "Analyze attachment directly.";
+                        if (allImages.every(img => img.startsWith("data:image/"))) {
+                            visionInstructions = "Analyze image directly.";
+                        } else if (allImages.every(img => img.startsWith("data:audio/"))) {
+                            visionInstructions = "Analyze audio directly.";
+                        }
                         if (workingMode === 'competitive') visionInstructions = "Solve the CP problem in the image.";
                         else if (workingMode === 'quiz') visionInstructions = "Solve this quiz question.";
 
                         const visionPrompt = `[VISION ACTIVE] ${visionInstructions}\n${prompt || ""}`;
                         const visionParts = [{ text: visionPrompt }];
                         allImages.forEach(img => {
-                            const mimeTypeMatch = img.match(/^data:(image\/[a-zA-Z]*);base64,/);
+                            const mimeTypeMatch = img.match(/^data:([^;]+);base64,/);
                             const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/png";
                             visionParts.push({ inlineData: { data: img.split(',')[1], mimeType: mimeType } });
                         });
@@ -512,6 +539,13 @@ Strictly adhere to the following rules:
 
 // Stream Gemini
 async function streamGemini({ prompt, modelName, images, image, history = [], workingMode }, callbacks) {
+    // Cancel any current stream before starting a new one
+    abortActiveStream();
+
+    const controller = new AbortController();
+    activeAbortController = controller;
+    const signal = controller.signal;
+
     let smartFallbacks = [];
     const isPro = await checkTierInternal();
 
@@ -622,14 +656,25 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
     const apiKeys = getApiKeys();
     if (apiKeys.length === 0) {
         if (callbacks.onError) callbacks.onError("No API Keys configured. Please go to Setup.");
+        if (activeAbortController === controller) activeAbortController = null;
         return;
     }
 
     // --- EXECUTION LOOP (Models x Keys) ---
     for (const modelId of modelFallbacks) {
         if (!modelId) continue;
+        if (signal.aborted) {
+            if (callbacks.onDone) callbacks.onDone(modelId);
+            if (activeAbortController === controller) activeAbortController = null;
+            return;
+        }
         
         for (let kIndex = 0; kIndex < apiKeys.length; kIndex++) {
+            if (signal.aborted) {
+                if (callbacks.onDone) callbacks.onDone(modelId);
+                if (activeAbortController === controller) activeAbortController = null;
+                return;
+            }
             const currentKey = apiKeys[kIndex];
             
             try {
@@ -662,7 +707,8 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
                                 }
                                 callbacks.onChunk(logs, true);
                             }
-                        }
+                        },
+                        signal: signal
                     });
                     if (callbacks.onChunk) {
                         // Replace everything with the clean final report once ready
@@ -670,6 +716,9 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
                     }
                     if (callbacks.onDone) {
                         callbacks.onDone(modelId, resultText);
+                    }
+                    if (activeAbortController === controller) {
+                        activeAbortController = null;
                     }
                     return; // Success!
                 }
@@ -690,14 +739,19 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
 
                 const executeStreamCall = async (activeModel) => {
                     if (allImages.length > 0) {
-                        let visionInstructions = "Analyze image directly.";
+                        let visionInstructions = "Analyze attachment directly.";
+                        if (allImages.every(img => img.startsWith("data:image/"))) {
+                            visionInstructions = "Analyze image directly.";
+                        } else if (allImages.every(img => img.startsWith("data:audio/"))) {
+                            visionInstructions = "Analyze audio directly.";
+                        }
                         if (workingMode === 'competitive') visionInstructions = "Solve the CP problem in the image.";
                         else if (workingMode === 'quiz') visionInstructions = "Solve this quiz question.";
 
                         const visionPrompt = `[VISION ACTIVE] ${visionInstructions}\n${prompt || ""}`;
                         const visionParts = [{ text: visionPrompt }];
                         allImages.forEach(img => {
-                            const mimeTypeMatch = img.match(/^data:(image\/[a-zA-Z]*);base64,/);
+                            const mimeTypeMatch = img.match(/^data:([^;]+);base64,/);
                             const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/png";
                             visionParts.push({ inlineData: { data: img.split(',')[1], mimeType: mimeType } });
                         });
@@ -716,7 +770,7 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
                                 { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
                                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
                             ]
-                        });
+                        }, { signal });
                     } else {
                         const genConfig = { maxOutputTokens: 65536 };
                         if (modelId.includes('thinking') || modelId.includes('gemini-3')) {
@@ -734,13 +788,15 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
                             ]
                         });
 
-                        return chat.sendMessageStream(prompt || ".");
+                        return chat.sendMessageStream(prompt || ".", { signal });
                     }
                 };
 
                 try {
                     resultStream = await executeStreamCall(model);
                 } catch (callError) {
+                    if (signal.aborted) throw callError;
+
                     const errorMsg = (callError.message || '').toLowerCase();
                     const isToolError = errorMsg.includes('tool') || 
                                        errorMsg.includes('grounding') || 
@@ -759,14 +815,27 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
 
                 // Consume stream
                 for await (const chunk of resultStream.stream) {
+                    if (signal.aborted) break;
                     const chunkText = chunk.text();
                     if (callbacks.onChunk) callbacks.onChunk(chunkText);
                 }
 
                 if (callbacks.onDone) callbacks.onDone(modelId);
+                if (activeAbortController === controller) {
+                    activeAbortController = null;
+                }
                 return; // Success!
 
             } catch (error) {
+                if (signal.aborted) {
+                    console.log("ZNinja Gemini: Stream aborted by user.");
+                    if (callbacks.onDone) callbacks.onDone(modelId);
+                    if (activeAbortController === controller) {
+                        activeAbortController = null;
+                    }
+                    return;
+                }
+
                 const errorMessage = error.message.toLowerCase();
                 const isRetryableError = 
                     errorMessage.includes('429') || 
@@ -790,11 +859,16 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
         }
     }
     
+    if (activeAbortController === controller) {
+        activeAbortController = null;
+    }
     if (callbacks.onError) callbacks.onError("All API Keys and model fallbacks exhausted. Please check your network or quota.");
 }
 
 module.exports = {
     listModels,
     askGemini,
-    streamGemini
+    streamGemini,
+    abortActiveStream
 };
+
