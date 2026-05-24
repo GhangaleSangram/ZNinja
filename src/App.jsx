@@ -210,11 +210,35 @@ function App() {
         }
 
         if (window.electron.onGeminiChunk) {
-            unsubs.push(window.electron.onGeminiChunk(({ chunk, replace }) => {
+            unsubs.push(window.electron.onGeminiChunk((data) => {
                 setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
                     if (lastMsg && lastMsg.isStreaming) {
-                        const updatedMsg = { ...lastMsg, text: replace ? chunk : lastMsg.text + chunk };
+                        let updatedMsg;
+                        if (data && typeof data === 'object') {
+                            if ('thought' in data) {
+                                updatedMsg = {
+                                    ...lastMsg,
+                                    thought: (lastMsg.thought || '') + data.thought
+                                };
+                            } else if ('text' in data) {
+                                updatedMsg = {
+                                    ...lastMsg,
+                                    text: data.replace ? data.text : (lastMsg.text || '') + data.text
+                                };
+                            } else {
+                                const { chunk, replace } = data;
+                                updatedMsg = {
+                                    ...lastMsg,
+                                    text: replace ? chunk : (lastMsg.text || '') + chunk
+                                };
+                            }
+                        } else {
+                            updatedMsg = {
+                                ...lastMsg,
+                                text: (lastMsg.text || '') + data
+                            };
+                        }
                         return [...prev.slice(0, -1), updatedMsg];
                     }
                     return prev;
