@@ -253,8 +253,8 @@ const MeetingRecorder = ({ onRecordingComplete }) => {
          if (mode === 'video') {
              const url = URL.createObjectURL(recordedBlob);
              return (
-                <div className="flex flex-col gap-2 bg-neutral-800 p-2 absolute bottom-9 -right-16 rounded-lg border border-neutral-600 shadow-xl z-50">
-                    <video src={url} controls className="w-72 rounded bg-black" />
+                <div className="flex flex-col gap-2 bg-neutral-800 p-2 absolute bottom-36 right-4 rounded-lg border border-neutral-600 shadow-xl z-50">
+                    <video src={url} controls className="w-52 rounded bg-black" />
                     <div className="flex items-center justify-between">
                         <button 
                             onClick={handleSave}
@@ -275,7 +275,7 @@ const MeetingRecorder = ({ onRecordingComplete }) => {
          }
 
         return (
-            <div className="flex items-center gap-2 bg-neutral-800 p-1.5 absolute bottom-9 w-fit -right-16 rounded-lg border border-neutral-600 shadow-xl">
+            <div className="flex items-center gap-2 bg-neutral-800 p-1.5 absolute bottom-40 w-fit right-4 rounded-lg border border-neutral-600 shadow-xl">
                  <button 
                     onClick={togglePlayback}
                     className="p-1 hover:text-emerald-400 text-neutral-300" 
@@ -291,7 +291,7 @@ const MeetingRecorder = ({ onRecordingComplete }) => {
                  </button>
                  <button 
                     onClick={handleTranscribe}
-                    className="px-2 py-0.5 whitespace-nowrap bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded animate-pulse" 
+                    className="px-2 py-0.5 whitespace-nowrap bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded" 
                  >
                     Analyze
                  </button>
