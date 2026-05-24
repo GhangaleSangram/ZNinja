@@ -94,30 +94,53 @@ const MessageItem = memo(({ msg }) => {
                 })()}
                 {msg.role === 'ai' ? (
                     <React.Suspense fallback={<div className="animate-pulse text-xs text-neutral-500 italic">Processing response...</div>}>
-                        {msg.isStreaming && !msg.text ? (
-                            <div className="flex items-center gap-2 py-1">
-                                <DotLoader 
-                                    frames={LOADER_FRAMES} 
-                                    className="gap-0.5" 
-                                    duration={200}
-                                    dotClassName="bg-white/40 [&.active]:bg-white "
-                                />
-                                <span className="text-sm text-white  animate-pulse">Thinking...</span>
-                            </div>
-                        ) : (
-                            <div className="relative">
-                                <LazyMarkdown 
-                                    remarkPlugins={plugins.remark}
-                                    rehypePlugins={plugins.rehype}
-                                    components={MARKDOWN_COMPONENTS}
-                                >
-                                    {msg.isStreaming ? msg.text : cleanResearchSteps(msg.text)}
-                                </LazyMarkdown>
-                                {msg.isStreaming && (
-                                    <span className="inline-block w-2 h-4 ml-1 bg-emerald-500 animate-pulse align-middle"></span>
-                                )}
-                            </div>
-                        )}
+                        <div className="flex flex-col gap-2 min-w-0">
+                            {/* Collapsible Thought Accordion */}
+                            {msg.thought && (
+                                <div className="mb-1 border border-neutral-700/40 bg-neutral-900/30 rounded-lg overflow-hidden backdrop-blur-sm shadow-inner transition-all duration-300">
+                                    <details className="group" open={msg.isStreaming && !msg.text}>
+                                        <summary className="flex items-center justify-between px-3 py-2 text-xs font-medium text-neutral-400 hover:text-white/80 cursor-pointer list-none select-none transition-all duration-200">
+                                            <div className="flex items-center gap-2">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-400 animate-pulse"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                                <span>{msg.isStreaming && !msg.text ? "Thinking..." : "Thinking Process"}</span>
+                                            </div>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-neutral-500 group-open:rotate-180 transition-transform duration-200"><polyline points="6 9 12 15 18 9" /></svg>
+                                        </summary>
+                                        <div className="px-3 pb-3 pt-1 border-t border-neutral-800/80 text-xs text-neutral-400 font-mono leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap select-text scrollbar-thin">
+                                            {msg.thought}
+                                        </div>
+                                    </details>
+                                </div>
+                            )}
+
+                            {/* Response Content or Loader */}
+                            {msg.isStreaming && !msg.text ? (
+                                <div className="flex items-center gap-2 py-1">
+                                    <DotLoader 
+                                        frames={LOADER_FRAMES} 
+                                        className="gap-0.5" 
+                                        duration={200}
+                                        dotClassName="bg-white/40 [&.active]:bg-white"
+                                    />
+                                    {!msg.thought && <span className="text-sm text-white animate-pulse">Thinking...</span>}
+                                </div>
+                            ) : (
+                                (msg.text || !msg.thought) && (
+                                    <div className="relative min-w-0">
+                                        <LazyMarkdown 
+                                            remarkPlugins={plugins.remark}
+                                            rehypePlugins={plugins.rehype}
+                                            components={MARKDOWN_COMPONENTS}
+                                        >
+                                            {msg.isStreaming ? msg.text : cleanResearchSteps(msg.text)}
+                                        </LazyMarkdown>
+                                        {msg.isStreaming && (
+                                            <span className="inline-block w-2 h-4 ml-1 bg-emerald-500 animate-pulse align-middle"></span>
+                                        )}
+                                    </div>
+                                )
+                            )}
+                        </div>
                     </React.Suspense>
                 ) : (
                     <span>{msg.text}</span>

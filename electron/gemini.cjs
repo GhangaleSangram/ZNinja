@@ -816,8 +816,24 @@ async function streamGemini({ prompt, modelName, images, image, history = [], wo
                 // Consume stream
                 for await (const chunk of resultStream.stream) {
                     if (signal.aborted) break;
-                    const chunkText = chunk.text();
-                    if (callbacks.onChunk) callbacks.onChunk(chunkText);
+                    
+                    const candidate = chunk.candidates?.[0];
+                    if (candidate && candidate.content && candidate.content.parts) {
+                        for (const part of candidate.content.parts) {
+                            if (part.thought) {
+                                if (callbacks.onChunk) callbacks.onChunk({ thought: part.text });
+                            } else if (part.text) {
+                                if (callbacks.onChunk) callbacks.onChunk({ text: part.text });
+                            }
+                        }
+                    } else {
+                        try {
+                            const chunkText = chunk.text();
+                            if (callbacks.onChunk) callbacks.onChunk({ text: chunkText });
+                        } catch (textErr) {
+                            console.warn("ZNinja Gemini: Chunk text fetch failed:", textErr.message);
+                        }
+                    }
                 }
 
                 if (callbacks.onDone) callbacks.onDone(modelId);
